@@ -2,6 +2,8 @@ import React, { useRef, useEffect } from 'react';
 import { Player, Projectile } from '../types/game';
 
 interface GameCanvasProps {
+  gameWidth: number;
+  gameHeight: number;
   players: Player[];
   landscape: number[];
   launchCommand: { angle: number; power: number; id: number; playerId: number } | null;
@@ -10,7 +12,7 @@ interface GameCanvasProps {
   wind: number;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ players, landscape, launchCommand, onPlayerHit, onGameEnd, wind }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players, landscape, launchCommand, onPlayerHit, onGameEnd, wind }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
   
@@ -71,11 +73,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ players, landscape, launchComma
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Sky
     ctx.fillStyle = '#87CEEB'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Landscape
     ctx.fillStyle = '#228B22'; 
     ctx.beginPath();
     ctx.moveTo(0, canvas.height);
@@ -98,7 +98,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ players, landscape, launchComma
       p.x += p.vx;
       p.y += p.vy;
 
-      // Collision with landscape
       const mapX = Math.floor(p.x);
       if (mapX >= 0 && mapX < currentLandscape.length) {
         if (p.y > currentLandscape[mapX]) {
@@ -146,12 +145,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ players, landscape, launchComma
       const angleRad = launchCommand.angle * (Math.PI / 180);
       const powerScale = launchCommand.power / 5;
 
-      const isFiringRight = activePlayer.x < window.innerWidth / 2;
+      const isFiringRight = activePlayer.x < gameWidth / 2;
       const vxMultiplier = isFiringRight ? 1 : -1;
 
       const newProjectile: Projectile = {
         x: activePlayer.x + TILE_SIZE / 2,
-        y: activePlayer.y + TILE_SIZE / 2 - 10, // Start slightly above player to avoid ground collision
+        y: activePlayer.y + TILE_SIZE / 2 - 10,
         vx: Math.cos(angleRad) * powerScale * vxMultiplier,
         vy: -Math.sin(angleRad) * powerScale,
         color: activePlayer.color,
@@ -160,24 +159,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ players, landscape, launchComma
 
       gameStateRef.current.projectiles.push(newProjectile);
     }
-  }, [launchCommand, players]);
+  }, [launchCommand, players, gameWidth]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight * 0.8;
-      animationFrameId.current = requestAnimationFrame(updateGame);
+      // Set internal resolution to fixed game dimensions
+      canvas.width = gameWidth;
+      canvas.height = gameHeight;
+      
+      if (!animationFrameId.current) {
+        animationFrameId.current = requestAnimationFrame(updateGame);
+      }
     }
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = null;
     };
-  }, []);
+  }, [gameWidth, gameHeight]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="w-full h-full bg-cover"
+      className="max-w-full max-h-full object-contain"
     />
   );
 };

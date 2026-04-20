@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import GameControls from './components/GameControls';
 import SplashMenu from './components/SplashMenu';
 import { Player } from './types/game';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, RotateCw } from 'lucide-react';
+
+// Fixed internal game resolution to prevent terrain regeneration on resize
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 600;
 
 // Utility to generate a random smooth landscape
 const generateLandscape = (width: number, height: number) => {
@@ -12,16 +16,14 @@ const generateLandscape = (width: number, height: number) => {
   const segments = 10;
   const segmentWidth = width / segments;
   
-  // Generate random heights for key points
   const points: { x: number; y: number }[] = [];
   for (let i = 0; i <= segments; i++) {
     points.push({
       x: i * segmentWidth,
-      y: groundBase + (Math.random() * 200 - 100), // Random variance
+      y: groundBase + (Math.random() * 200 - 100),
     });
   }
 
-  // Linear interpolation between points to create the map
   for (let x = 0; x < width; x++) {
     const segmentIndex = Math.floor(x / segmentWidth);
     if (segmentIndex >= segments) {
@@ -47,24 +49,34 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [launchCommand, setLaunchCommand] = useState<{angle: number, power: number, id: number, playerId: number} | null>(null);
   const [wind, setWind] = useState(Math.random() * 2 - 1);
+  const [isPortrait, setIsPortrait] = useState(false);
+  
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  // Track orientation
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    return () => window.removeEventListener('resize', checkOrientation);
+  }, []);
 
   const initializeGame = useCallback(() => {
-    const width = window.innerWidth;
-    const height = window.innerHeight * 0.8;
-    const TILE_SIZE = 32;
-    
-    // 1. Generate landscape first
-    const newLandscape = generateLandscape(width, height);
+    // Use fixed GAME_WIDTH and GAME_HEIGHT instead of dynamic dimensions
+    const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
 
-    // 2. Position players on the generated landscape
+    const TILE_SIZE = 32;
     const p1X = 80;
-    const p2X = width - 160;
+    const p2X = GAME_WIDTH - 160;
 
     const initialPlayers: Player[] = [
       { 
         id: 1, 
-        name: 'Doodoo head', // Changed unicorn name
+        name: 'Doodoo head', 
         color: '#9E7FFF', 
         x: p1X, 
         y: newLandscape[p1X] - TILE_SIZE, 
@@ -73,7 +85,7 @@ function App() {
       },
       { 
         id: 2, 
-        name: 'Blowfish', // Changed narwhal name
+        name: 'Blowfish', 
         color: '#38bdf8', 
         x: p2X, 
         y: newLandscape[p2X] - TILE_SIZE, 
@@ -125,35 +137,37 @@ function App() {
     setShowSplash(true);
   }, []);
 
-  useEffect(() => {
-    const handleResize = () => {
-      // For simplicity, we restart the landscape on resize to avoid stretching
-      initializeGame();
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [initializeGame]);
-
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans">
-      <header className="absolute top-0 left-0 w-full z-20 p-4 flex items-center justify-between backdrop-blur-sm bg-white/5 shadow-md">
-        <div className="flex items-center space-x-3">
-          <Sparkles size={36} className="text-yellow-300 animate-pulse" />
-          <h1 className="text-3xl font-extrabold tracking-tight">Unicorns & Narwhals</h1>
+      {/* Orientation Guard */}
+      {isPortrait && (
+        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
+          <div className="animate-bounce mb-4">
+            <RotateCw size={64} className="text-yellow-300" />
+          </div>
+          <h2 className="text-2xl md:text-4xl font-bold mb-2">Landscape Mode Required</h2>
+          <p className="text-lg text-gray-300">Please rotate your device to play Unicorns & Narwhals</p>
         </div>
-        <nav className="flex space-x-4">
-          <a href="#game" className="text-lg hover:text-pink-300 transition duration-300">Game</a>
-          <a href="#rules" className="text-lg hover:text-pink-300 transition duration-300">Rules</a>
-          <a href="#about" className="text-lg hover:text-pink-300 transition duration-300">About</a>
-        </nav>
+      )}
+
+      <header className="absolute top-0 left-0 w-full z-20 p-2 md:p-4 flex items-center justify-between backdrop-blur-sm bg-white/5 shadow-md">
+        <div className="flex items-center space-x-2 md:space-x-3">
+          <Sparkles size={24} className="text-yellow-300 animate-pulse md:w-9 md:h-9" />
+          <h1 className="text-xl md:text-3xl font-extrabold tracking-tight">Unicorns & Narwhals</h1>
+        </div>
       </header>
 
-      <main className="relative w-full h-screen flex flex-col items-center justify-center pt-20 pb-40">
-        {!showSplash && players.length > 0 && (
-          <>
+      <main className="relative w-full h-screen flex flex-col">
+        <div 
+          ref={canvasContainerRef} 
+          className={`flex-1 relative overflow-hidden flex items-center justify-center ${showSplash ? 'invisible' : 'visible'}`}
+        >
+          {!showSplash && players.length > 0 && (
             <GameCanvas
+              gameWidth={GAME_WIDTH}
+              gameHeight={GAME_HEIGHT}
               players={players}
               landscape={landscape}
               launchCommand={launchCommand}
@@ -161,52 +175,28 @@ function App() {
               onGameEnd={handleGameEnd}
               wind={wind}
             />
-            {currentPlayerData && (
-              <GameControls
-                key={currentPlayerIndex} 
-                currentPlayer={currentPlayerData}
-                onLaunch={handleLaunch}
-                wind={wind} 
-                gameOver={gameOver}
-              />
-            )}
-          </>
-        )}
-        {showSplash && (
-          <SplashMenu 
-            onStartGame={handleStartGame} 
-            winner={winner} 
+          )}
+        </div>
+
+        {!showSplash && currentPlayerData && (
+          <GameControls
+            key={currentPlayerIndex} 
+            currentPlayer={currentPlayerData}
+            onLaunch={handleLaunch}
+            wind={wind} 
+            gameOver={gameOver}
           />
         )}
+
+        {showSplash && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+            <SplashMenu 
+              onStartGame={handleStartGame} 
+              winner={winner} 
+            />
+          </div>
+        )}
       </main>
-
-      <section id="rules" className="relative w-full py-20 px-8 bg-gradient-to-br from-blue-800 to-cyan-700">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-extrabold mb-8 text-white">How to Play</h2>
-          <ul className="list-disc list-inside text-left text-xl leading-relaxed text-gray-200 space-y-3 max-w-2xl mx-auto">
-            <li>Choose your Unicorn or Narwhal!</li>
-            <li>Adjust the angle and power to aim your magical projectile.</li>
-            <li>Factor in the wind – it can help or hinder your shot!</li>
-            <li>One hit and your opponent is out!</li>
-            <li>Be the last creature standing to win!</li>
-          </ul>
-          <img src="https://images.pexels.com/photos/1642774/pexels-photo-1642774.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Game illustration" className="mt-12 rounded-xl shadow-xl w-full max-w-3xl mx-auto border-4 border-white/30"/>
-        </div>
-      </section>
-
-      <section id="about" className="relative w-full py-20 px-8 bg-gradient-to-br from-purple-900 to-indigo-800">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-5xl font-extrabold mb-8 text-white">About the Game</h2>
-          <p className="text-xl leading-relaxed text-gray-200 max-w-2xl mx-auto">
-            Welcome to Unicorns & Narwhals, a whimsical take on the classic artillery game! Engage in epic duels across fantastical landscapes.
-          </p>
-          <img src="https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" alt="Fantasy landscape" className="mt-12 rounded-xl shadow-xl w-full max-w-3xl mx-auto border-4 border-white/30"/>
-        </div>
-      </section>
-
-      <footer className="relative z-10 p-8 text-center bg-black/30 backdrop-blur-sm">
-        <p className="text-gray-300">&copy; 2025 Unicorns & Narwhals. All rights reserved.</p>
-      </footer>
     </div>
   );
 }
