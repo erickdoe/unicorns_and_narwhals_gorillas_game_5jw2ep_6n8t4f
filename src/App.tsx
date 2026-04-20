@@ -64,7 +64,7 @@ function App() {
     const initialPlayers: Player[] = [
       { 
         id: 1, 
-        name: 'Spikehead', // Changed unicorn name
+        name: 'Doodoo head', // Changed unicorn name
         color: '#9E7FFF', 
         x: p1X, 
         y: newLandscape[p1X] - TILE_SIZE, 
@@ -73,7 +73,7 @@ function App() {
       },
       { 
         id: 2, 
-        name: 'Bluegills', // Changed narwhal name
+        name: 'Blowfish', // Changed narwhal name
         color: '#38bdf8', 
         x: p2X, 
         y: newLandscape[p2X] - TILE_SIZE, 
