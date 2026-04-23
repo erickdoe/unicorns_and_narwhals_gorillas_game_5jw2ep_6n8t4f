@@ -134,7 +134,9 @@ function App() {
         
         if (users.length > 0) {
           const index = users.indexOf(userId);
-          setMyPlayerIndex(index);
+          if (index !== -1) {
+            setMyPlayerIndex(index);
+          }
           
           if (users.length >= 2) {
             setOpponentJoined(true);
@@ -163,11 +165,13 @@ function App() {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // If I am P1, I send the landscape to P2
-          // We check presence again to see if we are the first
+          // CRITICAL: We must track our presence to be visible to others
+          await channel.track({ online_at: new Date().toISOString() });
+          
+          // If I am the first user in the room, I define the landscape for everyone
           const state = channel.presenceState();
           const users = Object.keys(state);
-          if (users[0] === userId) {
+          if (users.length === 1 && users[0] === userId) {
             channel.send({
               type: 'broadcast',
               event: 'init_game',
