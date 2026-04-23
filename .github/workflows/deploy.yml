@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 on:
   push:
-    branches: ["main"] # Check if your branch is named 'main' or 'master'
+    branches: ["main", "Multiplayer-Experiment"] # Check if your branch is named 'main' or 'master'
 permissions:
   contents: read
   pages: write
