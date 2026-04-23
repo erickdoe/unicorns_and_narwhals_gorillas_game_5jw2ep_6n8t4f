@@ -4,6 +4,7 @@ import GameControls from './components/GameControls';
 import SplashMenu from './components/SplashMenu';
 import { Player } from './types/game';
 import { Sparkles, RotateCw } from 'lucide-react';
+import { supabase } from './lib/supabase';
 
 // Fixed internal game resolution to prevent terrain regeneration on resize
 const GAME_WIDTH = 1200;
@@ -40,7 +41,7 @@ const generateLandscape = (width: number, height: number) => {
   return landscape;
 };
 
-type GameMode = 'single' | 'multi' | null;
+type GameMode = 'single' | 'multi' | 'online' | null;
 
 function App() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -54,8 +55,14 @@ function App() {
   const [wind, setWind] = useState(Math.random() * 2 - 1);
   const [isPortrait, setIsPortrait] = useState(false);
   
+  // Online state
+  const [myPlayerIndex, setMyPlayerIndex] = useState<number | null>(null);
+  const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
+  const [opponentJoined, setOpponentJoined] = useState(false);
+  
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const isInFlight = useRef(false);
+  const supabaseChannel = useRef<any>(null);
 
   // Track orientation
   useEffect(() => {
@@ -68,7 +75,7 @@ function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  const initializeGame = useCallback((mode: GameMode) => {
+  const initializeGame = useCallback((mode: GameMode, roomId?: string) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
 
@@ -106,18 +113,86 @@ function App() {
     setWind(Math.random() * 2 - 1);
     setLaunchCommand(null);
     isInFlight.current = false;
+
+    if (mode === 'online' && roomId) {
+      setOnlineRoomId(roomId);
+      setupOnlineGame(roomId, newLandscape);
+    }
   }, []);
+
+  const setupOnlineGame = (roomId: string, currentLandscape: number[]) => {
+    const userId = Math.random().toString(36).substring(7);
+    
+    const channel = supabase.channel(roomId, {
+      config: { presence: { key: userId } }
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const users = Object.keys(state);
+        
+        if (users.length >= 1) {
+          // First user in the list is P1, second is P2
+          const index = users.indexOf(userId);
+          setMyPlayerIndex(index);
+          
+          if (users.length >= 2) {
+            setOpponentJoined(true);
+          }
+        }
+      })
+      .on('broadcast', { event: 'launch' }, ({ payload }) => {
+        const { angle, power, playerId } = payload;
+        setLaunchCommand({
+          angle,
+          power,
+          id: Date.now(),
+          playerId
+        });
+      })
+      .on('broadcast', { event: 'land' }, () => {
+        handleProjectileLanded();
+      })
+      .on('broadcast', { event: 'hit' }, ({ payload }) => {
+        const { targetId } = payload;
+        handlePlayerHit(targetId);
+      })
+      .on('broadcast', { event: 'init_game' }, ({ payload }) => {
+        const { landscape } = payload;
+        setLandscape(landscape);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // If I am P1, I send the landscape to P2
+          // We check presence again to see if we are the first
+          const state = channel.presenceState();
+          const users = Object.keys(state);
+          if (users[0] === userId) {
+            channel.send({
+              type: 'broadcast',
+              event: 'init_game',
+              payload: { landscape: currentLandscape }
+            });
+          }
+        }
+      });
+
+    supabaseChannel.current = channel;
+  };
 
   const handleStartGame = useCallback(() => {
     // This now just triggers the mode selection in SplashMenu
   }, []);
 
-  const handleSelectMode = useCallback((mode: GameMode) => {
-    initializeGame(mode);
+  const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
+    initializeGame(mode, roomId);
   }, [initializeGame]);
 
   const handleLaunch = useCallback((angle: number, power: number) => {
     const currentPlayer = players[currentPlayerIndex];
+    
+    // Local update
     setLaunchCommand({ 
       angle, 
       power, 
@@ -127,10 +202,18 @@ function App() {
     
     isInFlight.current = true;
     setWind(Math.random() * 2 - 1);
-  }, [players, currentPlayerIndex]);
+
+    // Online broadcast
+    if (gameMode === 'online' && supabaseChannel.current) {
+      supabaseChannel.current.send({
+        type: 'broadcast',
+        event: 'launch',
+        payload: { angle, power, playerId: currentPlayer.id }
+      });
+    }
+  }, [players, currentPlayerIndex, gameMode]);
 
   const handleProjectileLanded = useCallback(() => {
-    // Use the flight lock to ensure turns strictly alternate and only switch once per launch
     if (isInFlight.current) {
       isInFlight.current = false;
       setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
@@ -179,8 +262,33 @@ function App() {
     setGameMode(null);
   }, []);
 
+  // Online authority: only the player who fired the shot broadcasts the result
+  const handleOnlineProjectileLanded = useCallback(() => {
+    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+      supabaseChannel.current.send({
+        type: 'broadcast',
+        event: 'land',
+        payload: { playerId: players[currentPlayerIndex].id }
+      });
+    }
+    handleProjectileLanded();
+  }, [gameMode, currentPlayerIndex, myPlayerIndex, players, handleProjectileLanded]);
+
+  const handleOnlinePlayerHit = useCallback((playerId: number) => {
+    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+      supabaseChannel.current.send({
+        type: 'broadcast',
+        event: 'hit',
+        payload: { targetId: playerId }
+      });
+    }
+    handlePlayerHit(playerId);
+  }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
+
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
   const isAiTurn = gameMode === 'single' && currentPlayerIndex === 1;
+  const isWaitingForOpponent = gameMode === 'online' && !opponentJoined;
+  const isMyTurn = gameMode === 'online' && currentPlayerIndex === myPlayerIndex;
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans">
@@ -200,6 +308,11 @@ function App() {
           <Sparkles size={24} className="text-yellow-300 animate-pulse md:w-9 md:h-9" />
           <h1 className="text-xl md:text-3xl font-extrabold tracking-tight">Unicorns & Narwhals</h1>
         </div>
+        {gameMode === 'online' && (
+          <div className="text-sm font-medium bg-white/10 px-3 py-1 rounded-full border border-white/20">
+            Room: {onlineRoomId}
+          </div>
+        )}
       </header>
 
       <main className="relative w-full h-screen flex flex-col">
@@ -214,8 +327,8 @@ function App() {
               players={players}
               landscape={landscape}
               launchCommand={launchCommand}
-              onPlayerHit={handlePlayerHit}
-              onProjectileLanded={handleProjectileLanded}
+              onPlayerHit={gameMode === 'online' ? handleOnlinePlayerHit : handlePlayerHit}
+              onProjectileLanded={gameMode === 'online' ? handleOnlineProjectileLanded : handleProjectileLanded}
               onGameEnd={handleGameEnd}
               wind={wind}
             />
@@ -229,7 +342,7 @@ function App() {
             onLaunch={handleLaunch}
             wind={wind} 
             gameOver={gameOver}
-            disabled={isAiTurn}
+            disabled={isAiTurn || (gameMode === 'online' && !isMyTurn)}
           />
         )}
 
@@ -240,6 +353,15 @@ function App() {
               onSelectMode={handleSelectMode}
               winner={winner} 
             />
+          </div>
+        )}
+
+        {isWaitingForOpponent && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="text-center p-8 bg-white/10 rounded-3xl border-2 border-white/20 animate-pulse">
+              <h2 className="text-3xl font-bold mb-2">Waiting for Opponent...</h2>
+              <p className="text-gray-300">Share your Room ID with a friend to start the duel!</p>
+            </div>
           </div>
         )}
       </main>

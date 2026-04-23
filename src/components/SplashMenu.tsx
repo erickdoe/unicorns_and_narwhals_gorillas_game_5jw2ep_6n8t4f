@@ -1,25 +1,57 @@
 import React, { useState } from 'react';
-import { Sparkles, Trophy, User, Users } from 'lucide-react';
+import { Sparkles, Trophy, User, Users, Globe } from 'lucide-react';
 import { Player } from '../types/game';
 
 interface SplashMenuProps {
   onStartGame: () => void;
-  onSelectMode: (mode: 'single' | 'multi') => void;
+  onSelectMode: (mode: 'single' | 'multi' | 'online', roomId?: string) => void;
   winner?: Player | null;
 }
 
 const SplashMenu: React.FC<SplashMenuProps> = ({ onStartGame, onSelectMode, winner }) => {
   const [showModeSelection, setShowModeSelection] = useState(false);
+  const [showRoomInput, setShowRoomInput] = useState(false);
+  const [roomId, setRoomId] = useState('');
   const isVictory = !!winner;
 
   const handleStartClick = () => {
-    if (!isVictory) {
-      setShowModeSelection(true);
-    } else {
-      // If it's a victory screen, we just reset and show mode selection
-      setShowModeSelection(true);
-    }
+    setShowModeSelection(true);
   };
+
+  if (showRoomInput) {
+    return (
+      <div className="absolute inset-0 z-30 flex items-center justify-center backdrop-blur-lg bg-black/50 animate-fade-in">
+        <div className="text-center p-12 rounded-3xl shadow-2xl border-4 border-white/40 bg-gradient-to-br from-indigo-700 to-purple-800 transform transition duration-500">
+          <h2 className="text-4xl font-extrabold mb-6 text-white tracking-tight">Join Online Room</h2>
+          <input 
+            type="text" 
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+            placeholder="Enter Room ID (e.g. magic-123)"
+            className="w-full px-6 py-4 bg-white/20 border-2 border-white/30 rounded-xl text-white text-xl text-center focus:outline-none focus:border-yellow-400 transition-colors mb-6"
+          />
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => setShowRoomInput(false)}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (roomId.trim()) {
+                  onSelectMode('online', roomId.trim());
+                }
+              }}
+              className="px-8 py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl transition-all shadow-lg"
+            >
+              Join Game
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showModeSelection) {
     return (
@@ -50,6 +82,18 @@ const SplashMenu: React.FC<SplashMenuProps> = ({ onStartGame, onSelectMode, winn
               <Users size={48} className="text-yellow-300 mb-3 group-hover:scale-110 transition-transform" />
               <span className="text-2xl font-bold text-white">Two Player</span>
               <span className="text-sm text-gray-300 mt-1">Local Duel</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setShowModeSelection(false);
+                setShowRoomInput(true);
+              }}
+              className="group flex flex-col items-center justify-center px-8 py-6 bg-white/10 hover:bg-white/20 border-2 border-white/30 rounded-2xl transition-all duration-300 hover:scale-105 hover:border-yellow-400"
+            >
+              <Globe size={48} className="text-yellow-300 mb-3 group-hover:scale-110 transition-transform" />
+              <span className="text-2xl font-bold text-white">Online Duel</span>
+              <span className="text-sm text-gray-300 mt-1">Play over Internet</span>
             </button>
           </div>
 
