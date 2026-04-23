@@ -8,11 +8,12 @@ interface GameCanvasProps {
   landscape: number[];
   launchCommand: { angle: number; power: number; id: number; playerId: number } | null;
   onPlayerHit: (playerId: number) => void;
+  onProjectileLanded: () => void;
   onGameEnd: (winner: Player) => void;
   wind: number;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players, landscape, launchCommand, onPlayerHit, onGameEnd, wind }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players, landscape, launchCommand, onPlayerHit, onProjectileLanded, onGameEnd, wind }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
   
@@ -102,10 +103,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
       if (mapX >= 0 && mapX < currentLandscape.length) {
         if (p.y > currentLandscape[mapX]) {
           projectiles.splice(i, 1);
+          onProjectileLanded();
           continue;
         }
       } else if (p.x < 0 || p.x > canvas.width) {
         projectiles.splice(i, 1);
+        onProjectileLanded();
         continue;
       }
 
@@ -126,6 +129,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
 
       if (hit) {
         projectiles.splice(i, 1);
+        onProjectileLanded();
         continue;
       }
 
@@ -164,7 +168,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
-      // Set internal resolution to fixed game dimensions
       canvas.width = gameWidth;
       canvas.height = gameHeight;
       

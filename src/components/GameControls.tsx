@@ -6,16 +6,17 @@ interface GameControlsProps {
   onLaunch: (angle: number, power: number) => void;
   wind: number;
   gameOver: boolean;
+  disabled?: boolean;
 }
 
-const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wind, gameOver }) => {
+const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wind, gameOver, disabled }) => {
   const [angle, setAngle] = useState(0);
   const [power, setPower] = useState(0);
 
   const handleLaunch = useCallback(() => {
-    if (gameOver) return;
+    if (gameOver || disabled) return;
     onLaunch(angle, power);
-  }, [angle, power, onLaunch, gameOver]);
+  }, [angle, power, onLaunch, gameOver, disabled]);
 
   const playerEmoji = currentPlayer.isUnicorn ? '🦄' : '🐳';
 
@@ -30,15 +31,22 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
   }
 
   return (
-    <div className="w-full p-2 md:p-6 backdrop-blur-md bg-white/10 shadow-lg border-t border-white/20 transition-all duration-300">
+    <div className={`w-full p-2 md:p-6 backdrop-blur-md bg-white/10 shadow-lg border-t border-white/20 transition-all duration-300 ${disabled ? 'opacity-70' : ''}`}>
       {!gameOver && (
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-6 max-w-6xl mx-auto">
           {/* Player Info - Compact on mobile */}
           <div className="flex items-center space-x-2 shrink-0">
             <span className="text-xl md:text-2xl">{playerEmoji}</span>
-            <span className="text-sm md:text-lg font-bold text-white truncate max-w-[80px] md:max-w-none">
-              {currentPlayer.name}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm md:text-lg font-bold text-white truncate max-w-[80px] md:max-w-none">
+                {currentPlayer.name}
+              </span>
+              {disabled && (
+                <span className="text-[10px] md:text-xs text-yellow-300 font-medium animate-pulse">
+                  Computer is thinking...
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Controls Group - Horizontal on mobile */}
@@ -54,7 +62,8 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
                 max="90"
                 value={angle}
                 onChange={(e) => setAngle(Number(e.target.value))}
-                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-purple-400 to-pink-500 rounded-lg appearance-none cursor-pointer"
+                disabled={disabled}
+                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-purple-400 to-pink-500 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                 style={{ background: `linear-gradient(to right, #a78bfa ${angle}%, #f472b6 ${angle}%)` }}
               />
             </div>
@@ -69,7 +78,8 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
                 max="100"
                 value={power}
                 onChange={(e) => setPower(Number(e.target.value))}
-                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-blue-400 to-cyan-500 rounded-lg appearance-none cursor-pointer"
+                disabled={disabled}
+                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-blue-400 to-cyan-500 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
                 style={{ background: `linear-gradient(to right, #60a5fa ${power}%, #22d3ee ${power}%)` }}
               />
             </div>
@@ -84,8 +94,8 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
             </div>
             <button
               onClick={handleLaunch}
-              className="px-3 py-1 md:px-6 md:py-2 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs md:text-base font-bold rounded-full shadow-lg transform transition duration-300 hover:scale-105 active:scale-95 disabled:opacity-50"
-              disabled={gameOver}
+              className="px-3 py-1 md:px-6 md:py-2 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs md:text-base font-bold rounded-full shadow-lg transform transition duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={gameOver || disabled}
             >
               Launch!
             </button>

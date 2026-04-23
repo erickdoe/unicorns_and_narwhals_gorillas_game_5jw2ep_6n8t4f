@@ -40,6 +40,8 @@ const generateLandscape = (width: number, height: number) => {
   return landscape;
 };
 
+type GameMode = 'single' | 'multi' | null;
+
 function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [landscape, setLandscape] = useState<number[]>([]);
@@ -47,11 +49,13 @@ function App() {
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<Player | null>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [gameMode, setGameMode] = useState<GameMode>(null);
   const [launchCommand, setLaunchCommand] = useState<{angle: number, power: number, id: number, playerId: number} | null>(null);
   const [wind, setWind] = useState(Math.random() * 2 - 1);
   const [isPortrait, setIsPortrait] = useState(false);
   
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const isInFlight = useRef(false);
 
   // Track orientation
   useEffect(() => {
@@ -64,8 +68,7 @@ function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  const initializeGame = useCallback(() => {
-    // Use fixed GAME_WIDTH and GAME_HEIGHT instead of dynamic dimensions
+  const initializeGame = useCallback((mode: GameMode) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
 
@@ -99,12 +102,18 @@ function App() {
     setGameOver(false);
     setWinner(null);
     setShowSplash(false);
+    setGameMode(mode);
     setWind(Math.random() * 2 - 1);
     setLaunchCommand(null);
+    isInFlight.current = false;
   }, []);
 
   const handleStartGame = useCallback(() => {
-    initializeGame();
+    // This now just triggers the mode selection in SplashMenu
+  }, []);
+
+  const handleSelectMode = useCallback((mode: GameMode) => {
+    initializeGame(mode);
   }, [initializeGame]);
 
   const handleLaunch = useCallback((angle: number, power: number) => {
@@ -116,9 +125,41 @@ function App() {
       playerId: currentPlayer.id 
     });
     
+    isInFlight.current = true;
     setWind(Math.random() * 2 - 1);
-    setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
   }, [players, currentPlayerIndex]);
+
+  const handleProjectileLanded = useCallback(() => {
+    // Use the flight lock to ensure turns strictly alternate and only switch once per launch
+    if (isInFlight.current) {
+      isInFlight.current = false;
+      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+    }
+  }, [players.length]);
+
+  // AI Logic for Single Player
+  useEffect(() => {
+    if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver) {
+      const aiTimer = setTimeout(() => {
+        const aiPlayer = players[1];
+        const targetPlayer = players[0];
+        
+        const dx = targetPlayer.x - aiPlayer.x;
+        const dy = targetPlayer.y - aiPlayer.y;
+        const distance = Math.abs(dx);
+        
+        let angle = 45 + (Math.random() * 20 - 10); 
+        const basePower = (distance / 10) + (dy / 20);
+        const windAdjustment = wind * 15;
+        let power = basePower + windAdjustment + (Math.random() * 10 - 5);
+        power = Math.max(10, Math.min(100, power));
+        
+        handleLaunch(angle, power);
+      }, 1500);
+
+      return () => clearTimeout(aiTimer);
+    }
+  }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch]);
 
   const handlePlayerHit = useCallback((playerId: number) => {
     setPlayers(prev => {
@@ -135,9 +176,11 @@ function App() {
     setGameOver(true);
     setWinner(winningPlayer);
     setShowSplash(true);
+    setGameMode(null);
   }, []);
 
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
+  const isAiTurn = gameMode === 'single' && currentPlayerIndex === 1;
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans">
@@ -172,6 +215,7 @@ function App() {
               landscape={landscape}
               launchCommand={launchCommand}
               onPlayerHit={handlePlayerHit}
+              onProjectileLanded={handleProjectileLanded}
               onGameEnd={handleGameEnd}
               wind={wind}
             />
@@ -185,6 +229,7 @@ function App() {
             onLaunch={handleLaunch}
             wind={wind} 
             gameOver={gameOver}
+            disabled={isAiTurn}
           />
         )}
 
@@ -192,6 +237,7 @@ function App() {
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
             <SplashMenu 
               onStartGame={handleStartGame} 
+              onSelectMode={handleSelectMode}
               winner={winner} 
             />
           </div>
