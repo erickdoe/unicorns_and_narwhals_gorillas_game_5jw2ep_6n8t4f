@@ -132,8 +132,7 @@ function App() {
         const state = channel.presenceState();
         const users = Object.keys(state);
         
-        if (users.length >= 1) {
-          // First user in the list is P1, second is P2
+        if (users.length > 0) {
           const index = users.indexOf(userId);
           setMyPlayerIndex(index);
           
