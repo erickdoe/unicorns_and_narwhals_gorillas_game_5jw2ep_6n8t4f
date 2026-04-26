@@ -158,7 +158,6 @@ function App() {
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        // Map presence state to a sorted list of users based on their custom userId
         const users = Object.entries(state)
           .map(([id, data]) => ({
             id,
@@ -199,7 +198,6 @@ function App() {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // Track with the custom userId so we can find ourselves in the sync list
           await channel.track({ 
             userId: userId, 
             online_at: new Date().toISOString() 
@@ -316,10 +314,9 @@ function App() {
 
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
   const isAiTurn = gameMode === 'single' && currentPlayerIndex === 1;
-  const isWaitingForOpponent = gameMode === 'online' && !opponentJoined;
+  const isOnlineLobby = gameMode === 'online' && !opponentJoined;
   const isMyTurn = gameMode === 'online' && currentPlayerIndex === myPlayerIndex;
 
-  // Determine the correct disabled message based on game state
   const getDisabledMessage = () => {
     if (gameMode === 'single' && isAiTurn) return "Computer is thinking...";
     if (gameMode === 'online') {
@@ -356,9 +353,9 @@ function App() {
       <main className="relative w-full h-screen flex flex-col">
         <div 
           ref={canvasContainerRef} 
-          className={`flex-1 relative overflow-hidden flex items-center justify-center ${showSplash ? 'invisible' : 'visible'}`}
+          className={`flex-1 relative overflow-hidden flex items-center justify-center ${showSplash || isOnlineLobby ? 'invisible' : 'visible'}`}
         >
-          {!showSplash && players.length > 0 && (
+          {!showSplash && !isOnlineLobby && players.length > 0 && (
             <GameCanvas
               gameWidth={GAME_WIDTH}
               gameHeight={GAME_HEIGHT}
@@ -373,7 +370,7 @@ function App() {
           )}
         </div>
 
-        {!showSplash && currentPlayerData && (
+        {!showSplash && !isOnlineLobby && currentPlayerData && (
           <GameControls
             key={currentPlayerIndex} 
             currentPlayer={currentPlayerData}
@@ -395,7 +392,7 @@ function App() {
           </div>
         )}
 
-        {isWaitingForOpponent && (
+        {isOnlineLobby && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="text-center p-8 bg-white/10 rounded-3xl border-2 border-white/20 animate-pulse">
               <h2 className="text-3xl font-bold mb-2">Waiting for Opponent...</h2>
