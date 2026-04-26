@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 on:
   push:
-    branches: ["main", "Multiplayer-Experiment"] # Check if your branch is named 'main' or 'master'
+    branches: ["main", "Multiplayer-Experiment"]
 permissions:
   contents: read
   pages: write
@@ -11,15 +11,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-      - run: npm install
-      - run: npm run build
+          
+      - name: Install dependencies
+        run: npm ci # Use ci for consistent, faster installs in CI environments
+        
+      - name: Build project
+        # If this fails, check your GitHub Action logs for TypeScript errors.
+        # You can temporarily change this to 'npx vite build' to skip type checking.
+        run: npm run build 
+        
+      - name: Verify build output
+        run: ls -R dist # Debug step to ensure the dist folder was actually created
+        
       - uses: actions/upload-pages-artifact@v3
         with:
           path: 'dist'
+          
   deploy:
     needs: build
     runs-on: ubuntu-latest
