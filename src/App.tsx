@@ -75,6 +75,122 @@ function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
+  // 1. Base Game End Handler
+  const handleGameEnd = useCallback((winningPlayer: Player) => {
+    setGameOver(true);
+    setWinner(winningPlayer);
+    setShowSplash(true);
+    setGameMode(null);
+  }, []);
+
+  // 2. Base Player Hit Handler
+  const handlePlayerHit = useCallback((playerId: number) => {
+    setPlayers(prev => {
+      const newPlayers = prev.map(p => p.id === playerId ? { ...p, health: 0 } : p);
+      const alivePlayers = newPlayers.filter(p => p.health > 0);
+      if (alivePlayers.length === 1) {
+        handleGameEnd(alivePlayers[0]);
+      }
+      return newPlayers;
+    });
+  }, [handleGameEnd]);
+
+  // 3. Base Projectile Landed Handler
+  const handleProjectileLanded = useCallback(() => {
+    if (isInFlight.current) {
+      isInFlight.current = false;
+      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+    }
+  }, [players.length]);
+
+  // 4. Online Wrappers (Call base handlers and broadcast)
+  const handleOnlineProjectileLanded = useCallback(() => {
+    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+      supabaseChannel.current.send({
+        type: 'broadcast',
+        event: 'land',
+        payload: { playerId: players[currentPlayerIndex].id }
+      });
+    }
+    handleProjectileLanded();
+  }, [gameMode, currentPlayerIndex, myPlayerIndex, players, handleProjectileLanded]);
+
+  const handleOnlinePlayerHit = useCallback((playerId: number) => {
+    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+      supabaseChannel.current.send({
+        type: 'broadcast',
+        event: 'hit',
+        payload: { targetId: playerId }
+      });
+    }
+    handlePlayerHit(playerId);
+  }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
+
+  // 5. Online Setup Logic
+  const setupOnlineGame = useCallback((roomId: string, currentLandscape: number[]) => {
+    const userId = Math.random().toString(36).substring(7);
+    
+    const channel = supabase.channel(roomId, {
+      config: { presence: { key: userId } }
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        // Sort keys to ensure consistent player indexing across all clients
+        const users = Object.keys(state).sort();
+        
+        if (users.length > 0) {
+          const index = users.indexOf(userId);
+          if (index !== -1) {
+            setMyPlayerIndex(index);
+          }
+          
+          if (users.length >= 2) {
+            setOpponentJoined(true);
+          }
+        }
+      })
+      .on('broadcast', { event: 'launch' }, ({ payload }) => {
+        const { angle, power, playerId } = payload;
+        setLaunchCommand({
+          angle,
+          power,
+          id: Date.now(),
+          playerId
+        });
+      })
+      .on('broadcast', { event: 'land' }, () => {
+        handleProjectileLanded();
+      })
+      .on('broadcast', { event: 'hit' }, ({ payload }) => {
+        const { targetId } = payload;
+        handlePlayerHit(targetId);
+      })
+      .on('broadcast', { event: 'init_game' }, ({ payload }) => {
+        const { landscape } = payload;
+        setLandscape(landscape);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ online_at: new Date().toISOString() });
+          
+          const state = channel.presenceState();
+          const users = Object.keys(state).sort();
+          if (users.length === 1 && users[0] === userId) {
+            channel.send({
+              type: 'broadcast',
+              event: 'init_game',
+              payload: { landscape: currentLandscape }
+            });
+          }
+        }
+      });
+
+    supabaseChannel.current = channel;
+  }, [handleProjectileLanded, handlePlayerHit]);
+
+  // 6. Game Initialization
   const initializeGame = useCallback((mode: GameMode, roomId?: string) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
@@ -118,74 +234,10 @@ function App() {
       setOnlineRoomId(roomId);
       setupOnlineGame(roomId, newLandscape);
     }
-  }, []);
-
-  const setupOnlineGame = (roomId: string, currentLandscape: number[]) => {
-    const userId = Math.random().toString(36).substring(7);
-    
-    const channel = supabase.channel(roomId, {
-      config: { presence: { key: userId } }
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const users = Object.keys(state);
-        
-        if (users.length > 0) {
-          const index = users.indexOf(userId);
-          if (index !== -1) {
-            setMyPlayerIndex(index);
-          }
-          
-          if (users.length >= 2) {
-            setOpponentJoined(true);
-          }
-        }
-      })
-      .on('broadcast', { event: 'launch' }, ({ payload }) => {
-        const { angle, power, playerId } = payload;
-        setLaunchCommand({
-          angle,
-          power,
-          id: Date.now(),
-          playerId
-        });
-      })
-      .on('broadcast', { event: 'land' }, () => {
-        handleProjectileLanded();
-      })
-      .on('broadcast', { event: 'hit' }, ({ payload }) => {
-        const { targetId } = payload;
-        handlePlayerHit(targetId);
-      })
-      .on('broadcast', { event: 'init_game' }, ({ payload }) => {
-        const { landscape } = payload;
-        setLandscape(landscape);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // CRITICAL: We must track our presence to be visible to others
-          await channel.track({ online_at: new Date().toISOString() });
-          
-          // If I am the first user in the room, I define the landscape for everyone
-          const state = channel.presenceState();
-          const users = Object.keys(state);
-          if (users.length === 1 && users[0] === userId) {
-            channel.send({
-              type: 'broadcast',
-              event: 'init_game',
-              payload: { landscape: currentLandscape }
-            });
-          }
-        }
-      });
-
-    supabaseChannel.current = channel;
-  };
+  }, [setupOnlineGame]);
 
   const handleStartGame = useCallback(() => {
-    // This now just triggers the mode selection in SplashMenu
+    // Triggers mode selection in SplashMenu
   }, []);
 
   const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
@@ -195,7 +247,6 @@ function App() {
   const handleLaunch = useCallback((angle: number, power: number) => {
     const currentPlayer = players[currentPlayerIndex];
     
-    // Local update
     setLaunchCommand({ 
       angle, 
       power, 
@@ -206,7 +257,6 @@ function App() {
     isInFlight.current = true;
     setWind(Math.random() * 2 - 1);
 
-    // Online broadcast
     if (gameMode === 'online' && supabaseChannel.current) {
       supabaseChannel.current.send({
         type: 'broadcast',
@@ -215,13 +265,6 @@ function App() {
       });
     }
   }, [players, currentPlayerIndex, gameMode]);
-
-  const handleProjectileLanded = useCallback(() => {
-    if (isInFlight.current) {
-      isInFlight.current = false;
-      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
-    }
-  }, [players.length]);
 
   // AI Logic for Single Player
   useEffect(() => {
@@ -246,47 +289,6 @@ function App() {
       return () => clearTimeout(aiTimer);
     }
   }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch]);
-
-  const handlePlayerHit = useCallback((playerId: number) => {
-    setPlayers(prev => {
-      const newPlayers = prev.map(p => p.id === playerId ? { ...p, health: 0 } : p);
-      const alivePlayers = newPlayers.filter(p => p.health > 0);
-      if (alivePlayers.length === 1) {
-        handleGameEnd(alivePlayers[0]);
-      }
-      return newPlayers;
-    });
-  }, []);
-
-  const handleGameEnd = useCallback((winningPlayer: Player) => {
-    setGameOver(true);
-    setWinner(winningPlayer);
-    setShowSplash(true);
-    setGameMode(null);
-  }, []);
-
-  // Online authority: only the player who fired the shot broadcasts the result
-  const handleOnlineProjectileLanded = useCallback(() => {
-    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
-      supabaseChannel.current.send({
-        type: 'broadcast',
-        event: 'land',
-        payload: { playerId: players[currentPlayerIndex].id }
-      });
-    }
-    handleProjectileLanded();
-  }, [gameMode, currentPlayerIndex, myPlayerIndex, players, handleProjectileLanded]);
-
-  const handleOnlinePlayerHit = useCallback((playerId: number) => {
-    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
-      supabaseChannel.current.send({
-        type: 'broadcast',
-        event: 'hit',
-        payload: { targetId: playerId }
-      });
-    }
-    handlePlayerHit(playerId);
-  }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
 
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
   const isAiTurn = gameMode === 'single' && currentPlayerIndex === 1;
