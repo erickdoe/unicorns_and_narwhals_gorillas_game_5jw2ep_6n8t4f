@@ -7,9 +7,17 @@ interface GameControlsProps {
   wind: number;
   gameOver: boolean;
   disabled?: boolean;
+  disabledMessage?: string; // Added prop for dynamic messages
 }
 
-const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wind, gameOver, disabled }) => {
+const GameControls: React.FC<GameControlsProps> = ({ 
+  currentPlayer, 
+  onLaunch, 
+  wind, 
+  gameOver, 
+  disabled, 
+  disabledMessage = "Waiting..." 
+}) => {
   const [angle, setAngle] = useState(0);
   const [power, setPower] = useState(0);
 
@@ -34,7 +42,7 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
     <div className={`w-full p-2 md:p-6 backdrop-blur-md bg-white/10 shadow-lg border-t border-white/20 transition-all duration-300 ${disabled ? 'opacity-70' : ''}`}>
       {!gameOver && (
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-6 max-w-6xl mx-auto">
-          {/* Player Info - Compact on mobile */}
+          {/* Player Info */}
           <div className="flex items-center space-x-2 shrink-0">
             <span className="text-xl md:text-2xl">{playerEmoji}</span>
             <div className="flex flex-col">
@@ -43,13 +51,13 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
               </span>
               {disabled && (
                 <span className="text-[10px] md:text-xs text-yellow-300 font-medium animate-pulse">
-                  Computer is thinking...
+                  {disabledMessage}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Controls Group - Horizontal on mobile */}
+          {/* Controls Group */}
           <div className="flex flex-row md:flex-col items-center justify-center gap-4 md:gap-2 w-full max-w-md">
             <div className="flex items-center space-x-2 w-full">
               <label htmlFor="angle" className="text-xs md:text-white md:font-semibold whitespace-nowrap">
@@ -85,7 +93,7 @@ const GameControls: React.FC<GameControlsProps> = ({ currentPlayer, onLaunch, wi
             </div>
           </div>
 
-          {/* Wind and Launch - Compact on mobile */}
+          {/* Wind and Launch */}
           <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0">
             <div className="flex items-center space-x-1">
               <span className="text-xs md:text-white md:font-semibold">

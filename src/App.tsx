@@ -6,11 +6,9 @@ import { Player } from './types/game';
 import { Sparkles, RotateCw } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
-// Fixed internal game resolution to prevent terrain regeneration on resize
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
 
-// Utility to generate a random smooth landscape
 const generateLandscape = (width: number, height: number) => {
   const landscape = new Array(width).fill(0);
   const groundBase = height * 0.7;
@@ -55,7 +53,6 @@ function App() {
   const [wind, setWind] = useState(Math.random() * 2 - 1);
   const [isPortrait, setIsPortrait] = useState(false);
   
-  // Online state
   const [myPlayerIndex, setMyPlayerIndex] = useState<number | null>(null);
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
   const [opponentJoined, setOpponentJoined] = useState(false);
@@ -64,18 +61,15 @@ function App() {
   const isInFlight = useRef(false);
   const supabaseChannel = useRef<any>(null);
 
-  // Track orientation
   useEffect(() => {
     const checkOrientation = () => {
       setIsPortrait(window.innerHeight > window.innerWidth);
     };
-
     checkOrientation();
     window.addEventListener('resize', checkOrientation);
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  // 1. Base Game End Handler
   const handleGameEnd = useCallback((winningPlayer: Player) => {
     setGameOver(true);
     setWinner(winningPlayer);
@@ -83,7 +77,6 @@ function App() {
     setGameMode(null);
   }, []);
 
-  // 2. Base Player Hit Handler
   const handlePlayerHit = useCallback((playerId: number) => {
     setPlayers(prev => {
       const newPlayers = prev.map(p => p.id === playerId ? { ...p, health: 0 } : p);
@@ -95,7 +88,6 @@ function App() {
     });
   }, [handleGameEnd]);
 
-  // 3. Base Projectile Landed Handler
   const handleProjectileLanded = useCallback(() => {
     if (isInFlight.current) {
       isInFlight.current = false;
@@ -103,7 +95,6 @@ function App() {
     }
   }, [players.length]);
 
-  // 4. Online Wrappers (Call base handlers and broadcast)
   const handleOnlineProjectileLanded = useCallback(() => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
       supabaseChannel.current.send({
@@ -126,12 +117,9 @@ function App() {
     handlePlayerHit(playerId);
   }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
 
-  // 5. Online Setup Logic
   const setupOnlineGame = useCallback(async (roomId: string, currentLandscape: number[]) => {
     const userId = Math.random().toString(36).substring(7);
     
-    // --- DATABASE ROOM MANAGEMENT ---
-    // 1. Register/Join the room in the DB
     const { data: roomData } = await supabase
       .from('game_rooms')
       .select('player_count')
@@ -151,7 +139,6 @@ function App() {
       setOpponentJoined(true);
     }
 
-    // 2. Listen for DB changes (Opponent joining)
     supabase
       .channel(`room_status_${roomId}`)
       .on('postgres_changes', { 
@@ -166,16 +153,21 @@ function App() {
       })
       .subscribe();
 
-    // --- REALTIME GAME CHANNEL ---
     const channel = supabase.channel(roomId);
 
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        const users = Object.keys(state).sort();
+        // Map presence state to a sorted list of users based on their custom userId
+        const users = Object.entries(state)
+          .map(([id, data]) => ({
+            id,
+            ...data[0]
+          }))
+          .sort((a, b) => (a.userId || '').localeCompare(b.userId || ''));
         
         if (users.length > 0) {
-          const index = users.indexOf(userId);
+          const index = users.findIndex(u => u.userId === userId);
           if (index !== -1) {
             setMyPlayerIndex(index);
           }
@@ -207,9 +199,12 @@ function App() {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({ online_at: new Date().toISOString() });
+          // Track with the custom userId so we can find ourselves in the sync list
+          await channel.track({ 
+            userId: userId, 
+            online_at: new Date().toISOString() 
+          });
           
-          // If I'm the first player (creator), I send the landscape to the joiner
           if (currentCount === 0) {
             channel.send({
               type: 'broadcast',
@@ -223,7 +218,6 @@ function App() {
     supabaseChannel.current = channel;
   }, [handleProjectileLanded, handlePlayerHit]);
 
-  // 6. Game Initialization
   const initializeGame = useCallback((mode: GameMode, roomId?: string) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
@@ -269,9 +263,7 @@ function App() {
     }
   }, [setupOnlineGame]);
 
-  const handleStartGame = useCallback(() => {
-    // Triggers mode selection in SplashMenu
-  }, []);
+  const handleStartGame = useCallback(() => {}, []);
 
   const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
     initializeGame(mode, roomId);
@@ -299,7 +291,6 @@ function App() {
     }
   }, [players, currentPlayerIndex, gameMode]);
 
-  // AI Logic for Single Player
   useEffect(() => {
     if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver) {
       const aiTimer = setTimeout(() => {
@@ -328,9 +319,18 @@ function App() {
   const isWaitingForOpponent = gameMode === 'online' && !opponentJoined;
   const isMyTurn = gameMode === 'online' && currentPlayerIndex === myPlayerIndex;
 
+  // Determine the correct disabled message based on game state
+  const getDisabledMessage = () => {
+    if (gameMode === 'single' && isAiTurn) return "Computer is thinking...";
+    if (gameMode === 'online') {
+      if (myPlayerIndex === null) return "Connecting to room...";
+      if (!isMyTurn) return "Waiting for opponent...";
+    }
+    return "Waiting...";
+  };
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans">
-      {/* Orientation Guard */}
       {isPortrait && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
           <div className="animate-bounce mb-4">
@@ -381,6 +381,7 @@ function App() {
             wind={wind} 
             gameOver={gameOver}
             disabled={isAiTurn || (gameMode === 'online' && !isMyTurn)}
+            disabledMessage={getDisabledMessage()}
           />
         )}
 
