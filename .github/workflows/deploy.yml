@@ -1,38 +1,25 @@
 name: Deploy to GitHub Pages
-
 on:
   push:
-    branches: ["main", "Multiplayer-Experiment"] # Making sure both branches are covered
-
+    branches: ["main", "Multiplayer-Experiment"] # Check if your branch is named 'main' or 'master'
 permissions:
   contents: read
   pages: write
   id-token: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build the project
-        run: npm run build
-
-      - name: Upload production files
-        uses: actions/upload-pages-artifact@v3
+      - run: npm install
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: 'dist'
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -40,6 +27,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
