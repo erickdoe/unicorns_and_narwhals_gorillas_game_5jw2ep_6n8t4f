@@ -127,17 +127,51 @@ function App() {
   }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
 
   // 5. Online Setup Logic
-  const setupOnlineGame = useCallback((roomId: string, currentLandscape: number[]) => {
+  const setupOnlineGame = useCallback(async (roomId: string, currentLandscape: number[]) => {
     const userId = Math.random().toString(36).substring(7);
     
-    const channel = supabase.channel(roomId, {
-      config: { presence: { key: userId } }
+    // --- DATABASE ROOM MANAGEMENT ---
+    // 1. Register/Join the room in the DB
+    const { data: roomData } = await supabase
+      .from('game_rooms')
+      .select('player_count')
+      .eq('id', roomId)
+      .single();
+
+    const currentCount = roomData?.player_count || 0;
+    const newCount = currentCount + 1;
+
+    await supabase.from('game_rooms').upsert({ 
+      id: roomId, 
+      player_count: newCount,
+      status: newCount >= 2 ? 'playing' : 'waiting'
     });
+
+    if (newCount >= 2) {
+      setOpponentJoined(true);
+    }
+
+    // 2. Listen for DB changes (Opponent joining)
+    supabase
+      .channel(`room_status_${roomId}`)
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'game_rooms', 
+        filter: `id=eq.${roomId}` 
+      }, (payload) => {
+        if (payload.new.player_count >= 2) {
+          setOpponentJoined(true);
+        }
+      })
+      .subscribe();
+
+    // --- REALTIME GAME CHANNEL ---
+    const channel = supabase.channel(roomId);
 
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        // Sort keys to ensure consistent player indexing across all clients
         const users = Object.keys(state).sort();
         
         if (users.length > 0) {
@@ -175,9 +209,8 @@ function App() {
         if (status === 'SUBSCRIBED') {
           await channel.track({ online_at: new Date().toISOString() });
           
-          const state = channel.presenceState();
-          const users = Object.keys(state).sort();
-          if (users.length === 1 && users[0] === userId) {
+          // If I'm the first player (creator), I send the landscape to the joiner
+          if (currentCount === 0) {
             channel.send({
               type: 'broadcast',
               event: 'init_game',
