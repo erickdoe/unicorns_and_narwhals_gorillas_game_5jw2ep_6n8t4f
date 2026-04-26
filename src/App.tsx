@@ -97,10 +97,11 @@ function App() {
 
   const handleOnlineProjectileLanded = useCallback(() => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+      const nextIndex = (currentPlayerIndex + 1) % players.length;
       supabaseChannel.current.send({
         type: 'broadcast',
-        event: 'land',
-        payload: { playerId: players[currentPlayerIndex].id }
+        event: 'turn_change',
+        payload: { nextIndex }
       });
     }
     handleProjectileLanded();
@@ -122,16 +123,25 @@ function App() {
     
     const { data: roomData } = await supabase
       .from('game_rooms')
-      .select('player_count')
+      .select('player_count, landscape')
       .eq('id', roomId)
       .single();
 
     const currentCount = roomData?.player_count || 0;
     const newCount = currentCount + 1;
+    const existingLandscape = roomData?.landscape ? JSON.parse(roomData.landscape) : null;
+
+    // If we are the creator, save the landscape. If not, use the existing one.
+    const landscapeToSave = currentCount === 0 ? JSON.stringify(currentLandscape) : roomData?.landscape;
+    
+    if (existingLandscape) {
+      setLandscape(existingLandscape);
+    }
 
     await supabase.from('game_rooms').upsert({ 
       id: roomId, 
       player_count: newCount,
+      landscape: landscapeToSave,
       status: newCount >= 2 ? 'playing' : 'waiting'
     });
 
@@ -185,16 +195,14 @@ function App() {
           playerId
         });
       })
-      .on('broadcast', { event: 'land' }, () => {
-        handleProjectileLanded();
+      .on('broadcast', { event: 'turn_change' }, ({ payload }) => {
+        const { nextIndex } = payload;
+        setCurrentPlayerIndex(nextIndex);
+        isInFlight.current = false;
       })
       .on('broadcast', { event: 'hit' }, ({ payload }) => {
         const { targetId } = payload;
         handlePlayerHit(targetId);
-      })
-      .on('broadcast', { event: 'init_game' }, ({ payload }) => {
-        const { landscape } = payload;
-        setLandscape(landscape);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -202,14 +210,6 @@ function App() {
             userId: userId, 
             online_at: new Date().toISOString() 
           });
-          
-          if (currentCount === 0) {
-            channel.send({
-              type: 'broadcast',
-              event: 'init_game',
-              payload: { landscape: currentLandscape }
-            });
-          }
         }
       });
 
