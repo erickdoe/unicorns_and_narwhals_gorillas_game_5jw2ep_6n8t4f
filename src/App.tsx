@@ -3,7 +3,7 @@ import GameCanvas from './components/GameCanvas';
 import GameControls from './components/GameControls';
 import SplashMenu from './components/SplashMenu';
 import { Player } from './types/game';
-import { Sparkles, RotateCw } from 'lucide-react';
+import { Sparkles, RotateCw, User } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 const GAME_WIDTH = 1200;
@@ -101,11 +101,13 @@ function App() {
   }, [handleGameEnd]);
 
   const handleProjectileLanded = useCallback(() => {
-    setIsInFlight(false);
-    // Only update index locally if NOT in online mode
-    if (gameMode !== 'online') {
-      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
-    }
+    // Small delay to ensure the projectile is visually gone and state is settled
+    setTimeout(() => {
+      setIsInFlight(false);
+      if (gameMode !== 'online') {
+        setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+      }
+    }, 100);
   }, [players.length, gameMode]);
 
   const handleOnlineProjectileLanded = useCallback(() => {
@@ -306,6 +308,7 @@ function App() {
     if (isInFlight) return;
 
     const currentPlayer = players[currentPlayerIndex];
+    if (!currentPlayer) return;
     
     setLaunchCommand({ 
       angle, 
@@ -331,6 +334,7 @@ function App() {
       const aiTimer = setTimeout(() => {
         const aiPlayer = players[1];
         const targetPlayer = players[0];
+        if (!aiPlayer || !targetPlayer) return;
         
         const dx = targetPlayer.x - aiPlayer.x;
         const dy = targetPlayer.y - aiPlayer.y;
@@ -417,15 +421,21 @@ function App() {
         </div>
 
         {!showSplash && !isOnlineLobby && currentPlayerData && (
-          <GameControls
-            key={currentPlayerIndex} 
-            currentPlayer={currentPlayerData}
-            onLaunch={handleLaunch}
-            wind={wind} 
-            gameOver={gameOver}
-            disabled={isInFlight || isAiTurn || (gameMode === 'online' && !isMyTurn)}
-            disabledMessage={getDisabledMessage()}
-          />
+          <div className="flex flex-col items-center">
+            <div className="mb-2 flex items-center space-x-2 bg-white/20 px-4 py-1 rounded-full text-sm font-bold animate-bounce">
+              <User size={14} />
+              <span>{currentPlayerData.name}'s Turn</span>
+            </div>
+            <GameControls
+              key={currentPlayerIndex} 
+              currentPlayer={currentPlayerData}
+              onLaunch={handleLaunch}
+              wind={wind} 
+              gameOver={gameOver}
+              disabled={isInFlight || isAiTurn || (gameMode === 'online' && !isMyTurn)}
+              disabledMessage={getDisabledMessage()}
+            />
+          </div>
         )}
 
         {showSplash && (
