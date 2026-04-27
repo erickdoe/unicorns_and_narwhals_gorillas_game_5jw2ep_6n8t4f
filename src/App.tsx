@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase';
 
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
+const TILE_SIZE = 32;
 
 const generateLandscape = (width: number, height: number) => {
   const landscape = new Array(width).fill(0);
@@ -70,6 +71,17 @@ function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
+  // Helper to snap players to the current landscape
+  const snapPlayersToTerrain = useCallback((currentLandscape: number[], currentPlayers: Player[]) => {
+    return currentPlayers.map(player => {
+      const terrainY = currentLandscape[Math.floor(player.x + TILE_SIZE / 2)] || GAME_HEIGHT;
+      return {
+        ...player,
+        y: terrainY - TILE_SIZE
+      };
+    });
+  }, []);
+
   const handleGameEnd = useCallback((winningPlayer: Player) => {
     setGameOver(true);
     setWinner(winningPlayer);
@@ -118,6 +130,25 @@ function App() {
     handlePlayerHit(playerId);
   }, [gameMode, currentPlayerIndex, myPlayerIndex, handlePlayerHit]);
 
+  const leaveOnlineRoom = useCallback(async (roomId: string) => {
+    if (!roomId) return;
+    
+    const { data: roomData } = await supabase
+      .from('game_rooms')
+      .select('player_count')
+      .eq('id', roomId)
+      .single();
+
+    const currentCount = roomData?.player_count || 0;
+    const newCount = Math.max(0, currentCount - 1);
+
+    if (newCount === 0) {
+      await supabase.from('game_rooms').delete().eq('id', roomId);
+    } else {
+      await supabase.from('game_rooms').update({ player_count: newCount }).eq('id', roomId);
+    }
+  }, []);
+
   const setupOnlineGame = useCallback(async (roomId: string, currentLandscape: number[]) => {
     const userId = Math.random().toString(36).substring(7);
     
@@ -136,6 +167,7 @@ function App() {
     
     if (existingLandscape) {
       setLandscape(existingLandscape);
+      setPlayers(prev => snapPlayersToTerrain(existingLandscape, prev));
     }
 
     await supabase.from('game_rooms').upsert({ 
@@ -214,13 +246,12 @@ function App() {
       });
 
     supabaseChannel.current = channel;
-  }, [handleProjectileLanded, handlePlayerHit]);
+  }, [handleProjectileLanded, handlePlayerHit, snapPlayersToTerrain]);
 
   const initializeGame = useCallback((mode: GameMode, roomId?: string) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     setLandscape(newLandscape);
 
-    const TILE_SIZE = 32;
     const p1X = 80;
     const p2X = GAME_WIDTH - 160;
 
@@ -264,8 +295,12 @@ function App() {
   const handleStartGame = useCallback(() => {}, []);
 
   const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
+    // Cleanup previous room if switching modes
+    if (onlineRoomId) {
+      leaveOnlineRoom(onlineRoomId);
+    }
     initializeGame(mode, roomId);
-  }, [initializeGame]);
+  }, [initializeGame, onlineRoomId, leaveOnlineRoom]);
 
   const handleLaunch = useCallback((angle: number, power: number) => {
     const currentPlayer = players[currentPlayerIndex];
@@ -311,6 +346,15 @@ function App() {
       return () => clearTimeout(aiTimer);
     }
   }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch]);
+
+  // Cleanup room on unmount
+  useEffect(() => {
+    return () => {
+      if (onlineRoomId) {
+        leaveOnlineRoom(onlineRoomId);
+      }
+    };
+  }, [onlineRoomId, leaveOnlineRoom]);
 
   const currentPlayerData = players.length > 0 ? players[currentPlayerIndex] : null;
   const isAiTurn = gameMode === 'single' && currentPlayerIndex === 1;
