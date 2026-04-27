@@ -71,7 +71,6 @@ function App() {
     return () => window.removeEventListener('resize', checkOrientation);
   }, []);
 
-  // Helper to snap players to the current landscape
   const snapPlayersToTerrain = useCallback((currentLandscape: number[], currentPlayers: Player[]) => {
     return currentPlayers.map(player => {
       const terrainY = currentLandscape[Math.floor(player.x + TILE_SIZE / 2)] || GAME_HEIGHT;
@@ -103,9 +102,12 @@ function App() {
   const handleProjectileLanded = useCallback(() => {
     if (isInFlight.current) {
       isInFlight.current = false;
-      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+      // Only update index locally if NOT in online mode
+      if (gameMode !== 'online') {
+        setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+      }
     }
-  }, [players.length]);
+  }, [players.length, gameMode]);
 
   const handleOnlineProjectileLanded = useCallback(() => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
@@ -162,7 +164,6 @@ function App() {
     const newCount = currentCount + 1;
     const existingLandscape = roomData?.landscape ? JSON.parse(roomData.landscape) : null;
 
-    // If we are the creator, save the landscape. If not, use the existing one.
     const landscapeToSave = currentCount === 0 ? JSON.stringify(currentLandscape) : roomData?.landscape;
     
     if (existingLandscape) {
@@ -295,7 +296,6 @@ function App() {
   const handleStartGame = useCallback(() => {}, []);
 
   const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
-    // Cleanup previous room if switching modes
     if (onlineRoomId) {
       leaveOnlineRoom(onlineRoomId);
     }
@@ -347,7 +347,6 @@ function App() {
     }
   }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch]);
 
-  // Cleanup room on unmount
   useEffect(() => {
     return () => {
       if (onlineRoomId) {

@@ -17,6 +17,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
   
+  // Use refs for callbacks to avoid stale closures in the animation loop
+  const callbacksRef = useRef({
+    onPlayerHit,
+    onProjectileLanded,
+    onGameEnd
+  });
+
+  useEffect(() => {
+    callbacksRef.current = { onPlayerHit, onProjectileLanded, onGameEnd };
+  }, [onPlayerHit, onProjectileLanded, onGameEnd]);
+
   const gameStateRef = useRef({
     players: players,
     landscape: landscape,
@@ -103,12 +114,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
       if (mapX >= 0 && mapX < currentLandscape.length) {
         if (p.y > currentLandscape[mapX]) {
           projectiles.splice(i, 1);
-          onProjectileLanded();
+          callbacksRef.current.onProjectileLanded();
           continue;
         }
       } else if (p.x < 0 || p.x > canvas.width) {
         projectiles.splice(i, 1);
-        onProjectileLanded();
+        callbacksRef.current.onProjectileLanded();
         continue;
       }
 
@@ -121,7 +132,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
           p.x > player.x && p.x < player.x + TILE_SIZE &&
           p.y > player.y && p.y < player.y + TILE_SIZE
         ) {
-          onPlayerHit(player.id);
+          callbacksRef.current.onPlayerHit(player.id);
           hit = true;
           break;
         }
@@ -129,7 +140,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
 
       if (hit) {
         projectiles.splice(i, 1);
-        onProjectileLanded();
+        callbacksRef.current.onProjectileLanded();
         continue;
       }
 
