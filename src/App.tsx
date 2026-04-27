@@ -58,8 +58,9 @@ function App() {
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
   const [opponentJoined, setOpponentJoined] = useState(false);
   
+  const [isInFlight, setIsInFlight] = useState(false);
+  
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const isInFlight = useRef(false);
   const supabaseChannel = useRef<any>(null);
 
   useEffect(() => {
@@ -100,12 +101,10 @@ function App() {
   }, [handleGameEnd]);
 
   const handleProjectileLanded = useCallback(() => {
-    if (isInFlight.current) {
-      isInFlight.current = false;
-      // Only update index locally if NOT in online mode
-      if (gameMode !== 'online') {
-        setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
-      }
+    setIsInFlight(false);
+    // Only update index locally if NOT in online mode
+    if (gameMode !== 'online') {
+      setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
     }
   }, [players.length, gameMode]);
 
@@ -227,11 +226,12 @@ function App() {
           id: Date.now(),
           playerId
         });
+        setIsInFlight(true);
       })
       .on('broadcast', { event: 'turn_change' }, ({ payload }) => {
         const { nextIndex } = payload;
         setCurrentPlayerIndex(nextIndex);
-        isInFlight.current = false;
+        setIsInFlight(false);
       })
       .on('broadcast', { event: 'hit' }, ({ payload }) => {
         const { targetId } = payload;
@@ -285,7 +285,7 @@ function App() {
     setGameMode(mode);
     setWind(Math.random() * 2 - 1);
     setLaunchCommand(null);
-    isInFlight.current = false;
+    setIsInFlight(false);
 
     if (mode === 'online' && roomId) {
       setOnlineRoomId(roomId);
@@ -303,6 +303,8 @@ function App() {
   }, [initializeGame, onlineRoomId, leaveOnlineRoom]);
 
   const handleLaunch = useCallback((angle: number, power: number) => {
+    if (isInFlight) return;
+
     const currentPlayer = players[currentPlayerIndex];
     
     setLaunchCommand({ 
@@ -312,7 +314,7 @@ function App() {
       playerId: currentPlayer.id 
     });
     
-    isInFlight.current = true;
+    setIsInFlight(true);
     setWind(Math.random() * 2 - 1);
 
     if (gameMode === 'online' && supabaseChannel.current) {
@@ -322,10 +324,10 @@ function App() {
         payload: { angle, power, playerId: currentPlayer.id }
       });
     }
-  }, [players, currentPlayerIndex, gameMode]);
+  }, [players, currentPlayerIndex, gameMode, isInFlight]);
 
   useEffect(() => {
-    if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver) {
+    if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver && !isInFlight) {
       const aiTimer = setTimeout(() => {
         const aiPlayer = players[1];
         const targetPlayer = players[0];
@@ -345,7 +347,7 @@ function App() {
 
       return () => clearTimeout(aiTimer);
     }
-  }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch]);
+  }, [currentPlayerIndex, gameMode, gameOver, players, wind, handleLaunch, isInFlight]);
 
   useEffect(() => {
     return () => {
@@ -361,6 +363,7 @@ function App() {
   const isMyTurn = gameMode === 'online' && currentPlayerIndex === myPlayerIndex;
 
   const getDisabledMessage = () => {
+    if (isInFlight) return "Projectile in flight...";
     if (gameMode === 'single' && isAiTurn) return "Computer is thinking...";
     if (gameMode === 'online') {
       if (myPlayerIndex === null) return "Connecting to room...";
@@ -420,7 +423,7 @@ function App() {
             onLaunch={handleLaunch}
             wind={wind} 
             gameOver={gameOver}
-            disabled={isAiTurn || (gameMode === 'online' && !isMyTurn)}
+            disabled={isInFlight || isAiTurn || (gameMode === 'online' && !isMyTurn)}
             disabledMessage={getDisabledMessage()}
           />
         )}
