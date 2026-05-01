@@ -59,7 +59,6 @@ function App() {
   const [opponentJoined, setOpponentJoined] = useState(false);
   const [isInFlight, setIsInFlight] = useState(false);
   
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const supabaseChannel = useRef<any>(null);
   const userIdRef = useRef(Math.random().toString(36).substring(7));
 
@@ -245,13 +244,12 @@ function App() {
   const isMyTurn = gameMode === 'online' ? currentPlayerIndex === myPlayerIndex : true;
 
   const handleLaunch = useCallback((angle: number, power: number) => {
-    // CRITICAL: Strict turn validation
     if (isInFlight || (gameMode === 'online' && !isMyTurn)) return;
 
     const currentPlayer = players[currentPlayerIndex];
     if (!currentPlayer) return;
     
-    setIsInFlight(true); // Lock immediately
+    setIsInFlight(true);
     setLaunchCommand({ angle, power, id: Date.now(), playerId: currentPlayer.id });
     setWind(Math.random() * 2 - 1);
 
@@ -281,7 +279,7 @@ function App() {
   const isOnlineLobby = gameMode === 'online' && !opponentJoined;
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans">
+    <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans flex flex-col">
       {isPortrait && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
           <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-4" />
@@ -289,26 +287,25 @@ function App() {
         </div>
       )}
 
-      <header className="absolute top-0 left-0 w-full z-20 p-4 flex items-center justify-between backdrop-blur-sm bg-white/5">
-        <div className="flex items-center space-x-3">
-          <Sparkles size={24} className="text-yellow-300 animate-pulse" />
-          <h1 className="text-xl md:text-2xl font-extrabold">Unicorns & Narwhals</h1>
+      {/* Header - Fixed Height */}
+      <header className="shrink-0 z-20 p-3 flex items-center justify-between backdrop-blur-sm bg-white/5">
+        <div className="flex items-center space-x-2">
+          <Sparkles size={18} className="text-yellow-300" />
+          <h1 className="text-sm md:text-xl font-extrabold tracking-tight">Unicorns & Narwhals</h1>
         </div>
         {gameMode === 'online' && (
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/30 text-xs font-bold">
-              <ShieldCheck size={14} className="text-green-400" />
-              <span>You are Player {myPlayerIndex !== null ? myPlayerIndex + 1 : '?'}</span>
-            </div>
-            <div className="text-xs font-medium bg-white/10 px-3 py-1 rounded-full border border-white/20">
-              Room: {onlineRoomId}
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 bg-green-500/20 px-2 py-0.5 rounded-full border border-green-500/30 text-[10px] font-bold">
+              <ShieldCheck size={12} className="text-green-400" />
+              <span>P{myPlayerIndex !== null ? myPlayerIndex + 1 : '?'}</span>
             </div>
           </div>
         )}
       </header>
 
-      <main className="relative w-full h-screen flex flex-col">
-        <div className={`flex-1 relative flex items-center justify-center ${showSplash || isOnlineLobby ? 'invisible' : 'visible'}`}>
+      {/* Main Game Area - Flexible Height */}
+      <main className="flex-1 relative flex flex-col min-h-0">
+        <div className={`flex-1 relative flex items-center justify-center min-h-0 ${showSplash || isOnlineLobby ? 'invisible' : 'visible'}`}>
           {!showSplash && !isOnlineLobby && players.length > 0 && (
             <GameCanvas
               gameWidth={GAME_WIDTH}
@@ -324,12 +321,19 @@ function App() {
           )}
         </div>
 
+        {/* Turn Indicator Overlay */}
         {!showSplash && !isOnlineLobby && currentPlayerData && (
-          <div className="flex flex-col items-center">
-            <div className="mb-2 flex items-center space-x-2 bg-white/20 px-4 py-1 rounded-full text-sm font-bold animate-bounce">
-              <User size={14} />
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 pointer-events-none">
+            <div className="flex items-center space-x-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold border border-white/20">
+              <User size={10} />
               <span>{currentPlayerData.name}'s Turn</span>
             </div>
+          </div>
+        )}
+
+        {/* Controls - Pinned to Bottom */}
+        {!showSplash && !isOnlineLobby && currentPlayerData && (
+          <div className="shrink-0">
             <GameControls
               key={currentPlayerIndex} 
               currentPlayer={currentPlayerData}
@@ -350,9 +354,9 @@ function App() {
 
         {isOnlineLobby && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-            <div className="text-center p-8 bg-white/10 rounded-3xl border-2 border-white/20 animate-pulse">
-              <h2 className="text-3xl font-bold mb-2">Waiting for Opponent...</h2>
-              <p className="text-gray-300">Room ID: <span className="text-white font-mono font-bold">{onlineRoomId}</span></p>
+            <div className="text-center p-6 bg-white/10 rounded-3xl border-2 border-white/20 animate-pulse">
+              <h2 className="text-xl font-bold mb-1">Waiting for Opponent...</h2>
+              <p className="text-xs text-gray-300">Room: <span className="text-white font-mono font-bold">{onlineRoomId}</span></p>
             </div>
           </div>
         )}

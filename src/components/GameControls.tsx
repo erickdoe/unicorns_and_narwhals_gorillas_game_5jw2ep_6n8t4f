@@ -7,7 +7,7 @@ interface GameControlsProps {
   wind: number;
   gameOver: boolean;
   disabled?: boolean;
-  disabledMessage?: string; // Added prop for dynamic messages
+  disabledMessage?: string;
 }
 
 const GameControls: React.FC<GameControlsProps> = ({ 
@@ -27,7 +27,6 @@ const GameControls: React.FC<GameControlsProps> = ({
   }, [angle, power, onLaunch, gameOver, disabled]);
 
   const playerEmoji = currentPlayer.isUnicorn ? '🦄' : '🐳';
-
   const windValue = Math.round(wind);
   const absWind = Math.abs(windValue);
   let windArrow = '↔';
@@ -39,82 +38,79 @@ const GameControls: React.FC<GameControlsProps> = ({
   }
 
   return (
-    <div className={`w-full p-2 md:p-6 backdrop-blur-md bg-white/10 shadow-lg border-t border-white/20 transition-all duration-300 ${disabled ? 'opacity-70' : ''}`}>
+    <div className={`w-full px-4 py-2 md:py-4 backdrop-blur-md bg-white/10 border-t border-white/20 transition-all duration-300 ${disabled ? 'opacity-70' : ''}`}>
       {!gameOver && (
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-6 max-w-6xl mx-auto">
-          {/* Player Info */}
-          <div className="flex items-center space-x-2 shrink-0">
-            <span className="text-xl md:text-2xl">{playerEmoji}</span>
-            <div className="flex flex-col">
-              <span className="text-sm md:text-lg font-bold text-white truncate max-w-[80px] md:max-w-none">
-                {currentPlayer.name}
-              </span>
-              {disabled && (
-                <span className="text-[10px] md:text-xs text-yellow-300 font-medium animate-pulse">
-                  {disabledMessage}
+        <div className="max-w-6xl mx-auto flex flex-col gap-2">
+          {/* Top Row: Info & Wind */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-lg md:text-2xl">{playerEmoji}</span>
+              <div className="flex flex-col">
+                <span className="text-xs md:text-sm font-bold text-white truncate max-w-[100px]">
+                  {currentPlayer.name}
                 </span>
-              )}
+                {disabled && (
+                  <span className="text-[10px] text-yellow-300 font-medium animate-pulse">
+                    {disabledMessage}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <div className="text-[10px] md:text-xs font-bold bg-black/20 px-2 py-1 rounded uppercase tracking-wider">
+                Wind: {absWind} {windArrow}
+              </div>
+              <button
+                onClick={handleLaunch}
+                className="px-4 py-1.5 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-full shadow-lg transform transition active:scale-95 disabled:opacity-50"
+                disabled={gameOver || disabled}
+              >
+                LAUNCH
+              </button>
             </div>
           </div>
 
-          {/* Controls Group */}
-          <div className="flex flex-row md:flex-col items-center justify-center gap-4 md:gap-2 w-full max-w-md">
-            <div className="flex items-center space-x-2 w-full">
-              <label htmlFor="angle" className="text-xs md:text-white md:font-semibold whitespace-nowrap">
-                Ang: {angle}°
-              </label>
+          {/* Bottom Row: Sliders (Side by Side on Mobile) */}
+          <div className="grid grid-cols-2 gap-4 md:gap-8">
+            <div className="flex flex-col space-y-1">
+              <div className="flex justify-between text-[10px] font-bold text-purple-200 uppercase">
+                <span>Angle</span>
+                <span>{angle}°</span>
+              </div>
               <input
-                id="angle"
                 type="range"
                 min="0"
                 max="90"
                 value={angle}
                 onChange={(e) => setAngle(Number(e.target.value))}
                 disabled={disabled}
-                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-purple-400 to-pink-500 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
-                style={{ background: `linear-gradient(to right, #a78bfa ${angle}%, #f472b6 ${angle}%)` }}
+                className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-400"
               />
             </div>
-            <div className="flex items-center space-x-2 w-full">
-              <label htmlFor="power" className="text-xs md:text-white md:font-semibold whitespace-nowrap">
-                Pow: {power}%
-              </label>
+            <div className="flex flex-col space-y-1">
+              <div className="flex justify-between text-[10px] font-bold text-blue-200 uppercase">
+                <span>Power</span>
+                <span>{power}%</span>
+              </div>
               <input
-                id="power"
                 type="range"
                 min="0"
                 max="100"
                 value={power}
                 onChange={(e) => setPower(Number(e.target.value))}
                 disabled={disabled}
-                className="w-full h-1.5 md:h-2 bg-gradient-to-r from-blue-400 to-cyan-500 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed"
-                style={{ background: `linear-gradient(to right, #60a5fa ${power}%, #22d3ee ${power}%)` }}
+                className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-400"
               />
             </div>
           </div>
-
-          {/* Wind and Launch */}
-          <div className="flex items-center justify-between md:justify-end space-x-4 shrink-0">
-            <div className="flex items-center space-x-1">
-              <span className="text-xs md:text-white md:font-semibold">
-                Wind: {absWind} <span className="text-lg md:text-2xl ml-1">{windArrow}</span>
-              </span>
-            </div>
-            <button
-              onClick={handleLaunch}
-              className="px-3 py-1 md:px-6 md:py-2 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs md:text-base font-bold rounded-full shadow-lg transform transition duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={gameOver || disabled}
-            >
-              Launch!
-            </button>
-          </div>
         </div>
       )}
+      
       {gameOver && (
-        <div className="text-center py-2">
-          <h2 className="text-xl md:text-3xl font-bold text-white mb-2 md:mb-4">Game Over!</h2>
-          <p className="text-lg md:text-2xl font-semibold text-white">
-            Winner: {currentPlayer.name} ({currentPlayer.isUnicorn ? 'Unicorn' : 'Narwhal'})
+        <div className="text-center py-1">
+          <p className="text-sm font-bold text-white">
+            Winner: {currentPlayer.name}
           </p>
         </div>
       )}
