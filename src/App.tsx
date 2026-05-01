@@ -108,23 +108,22 @@ function App() {
     }, 150);
   }, [players.length, gameMode]);
 
-  const handleOnlineProjectileLanded = useCallback(() => {
-    // CRITICAL FIX: Only the player whose turn it is acts as the authority to end the turn
-    if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
+  const handleOnlineProjectileLanded = useCallback(async () => {
+    // Only the active player can trigger the turn change in the database
+    if (gameMode === 'online' && onlineRoomId && currentPlayerIndex === myPlayerIndex) {
       const nextIndex = (currentPlayerIndex + 1) % players.length;
-      supabaseChannel.current.send({
-        type: 'broadcast',
-        event: 'turn_change',
-        payload: { nextIndex }
-      });
+      
+      // Update the database as the single source of truth for the turn
+      await supabase
+        .from('game_rooms')
+        .update({ current_turn: nextIndex })
+        .eq('id', onlineRoomId);
     }
     
-    // In online mode, we DO NOT call handleProjectileLanded() locally.
-    // We wait for the 'turn_change' broadcast to unlock isInFlight and swap players.
     if (gameMode !== 'online') {
       handleProjectileLanded();
     }
-  }, [gameMode, currentPlayerIndex, myPlayerIndex, players.length, handleProjectileLanded]);
+  }, [gameMode, currentPlayerIndex, myPlayerIndex, players.length, handleProjectileLanded, onlineRoomId]);
 
   const handleOnlinePlayerHit = useCallback((playerId: number) => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
@@ -163,23 +162,27 @@ function App() {
   const setupOnlineGame = useCallback(async (roomId: string, currentLandscape: number[]) => {
     const { data: roomData } = await supabase
       .from('game_rooms')
-      .select('player_count, landscape')
+      .select('player_count, landscape, current_turn')
       .eq('id', roomId)
       .single();
 
     const currentCount = roomData?.player_count || 0;
     const newCount = currentCount + 1;
     const existingLandscape = roomData?.landscape ? JSON.parse(roomData.landscape) : null;
+    const initialTurn = roomData?.current_turn ?? 0;
 
     if (existingLandscape) {
       setLandscape(existingLandscape);
       setPlayers(prev => snapPlayersToTerrain(existingLandscape, prev));
     }
+    
+    setCurrentPlayerIndex(initialTurn);
 
     await supabase.from('game_rooms').upsert({ 
       id: roomId, 
       player_count: newCount,
       landscape: currentCount === 0 ? JSON.stringify(currentLandscape) : roomData?.landscape,
+      current_turn: initialTurn,
       status: newCount >= 2 ? 'playing' : 'waiting'
     });
 
@@ -200,11 +203,6 @@ function App() {
         setLaunchCommand({ ...payload, id: Date.now() });
         setIsInFlight(true);
       })
-      .on('broadcast', { event: 'turn_change' }, ({ payload }) => {
-        // Synchronized unlock: everyone swaps turns and unlocks at the same time
-        setCurrentPlayerIndex(payload.nextIndex);
-        setIsInFlight(false);
-      })
       .on('broadcast', { event: 'hit' }, ({ payload }) => {
         handlePlayerHit(payload.targetId);
       })
@@ -213,6 +211,22 @@ function App() {
           await channel.track({ userId: userIdRef.current, online_at: new Date().toISOString() });
         }
       });
+
+    // Listen for database changes to the current_turn column for guaranteed sync
+    supabase
+      .channel('db-changes')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'game_rooms', 
+        filter: `id=eq.${roomId}` 
+      }, (payload) => {
+        if (payload.new.current_turn !== undefined) {
+          setCurrentPlayerIndex(payload.new.current_turn);
+          setIsInFlight(false); // Unlock when the turn officially changes in DB
+        }
+      })
+      .subscribe();
 
     supabaseChannel.current = channel;
   }, [handlePlayerHit, snapPlayersToTerrain]);
