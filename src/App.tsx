@@ -109,6 +109,7 @@ function App() {
   }, [players.length, gameMode]);
 
   const handleOnlineProjectileLanded = useCallback(() => {
+    // CRITICAL FIX: Only the player whose turn it is acts as the authority to end the turn
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
       const nextIndex = (currentPlayerIndex + 1) % players.length;
       supabaseChannel.current.send({
@@ -117,7 +118,12 @@ function App() {
         payload: { nextIndex }
       });
     }
-    handleProjectileLanded();
+    
+    // In online mode, we DO NOT call handleProjectileLanded() locally.
+    // We wait for the 'turn_change' broadcast to unlock isInFlight and swap players.
+    if (gameMode !== 'online') {
+      handleProjectileLanded();
+    }
   }, [gameMode, currentPlayerIndex, myPlayerIndex, players.length, handleProjectileLanded]);
 
   const handleOnlinePlayerHit = useCallback((playerId: number) => {
@@ -195,6 +201,7 @@ function App() {
         setIsInFlight(true);
       })
       .on('broadcast', { event: 'turn_change' }, ({ payload }) => {
+        // Synchronized unlock: everyone swaps turns and unlocks at the same time
         setCurrentPlayerIndex(payload.nextIndex);
         setIsInFlight(false);
       })
