@@ -203,7 +203,6 @@ function App() {
         if (users.length >= 2) setOpponentJoined(true);
       })
       .on('broadcast', { event: 'launch' }, ({ payload }) => {
-        // Sync wind from the launcher to ensure identical trajectories
         setWind(payload.wind);
         setLaunchCommand({ ...payload, id: Date.now() });
         setIsInFlight(true);
@@ -236,17 +235,35 @@ function App() {
     supabaseChannel.current = channel;
   }, [handlePlayerHit, snapPlayersToTerrain]);
 
-  const initializeGame = useCallback((mode: GameMode, roomId?: string) => {
+  const initializeGame = useCallback(async (mode: GameMode, roomId?: string) => {
     const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
-    setLandscape(newLandscape);
-
+    
     const initialPlayers: Player[] = [
       { id: 1, name: 'Doodoo head', color: '#9E7FFF', x: 80, y: 0, health: 100, isUnicorn: true },
       { id: 2, name: 'Blowfish', color: '#38bdf8', x: GAME_WIDTH - 160, y: 0, health: 100, isUnicorn: false },
     ];
 
-    const snappedPlayers = snapPlayersToTerrain(newLandscape, initialPlayers);
-    setPlayers(snappedPlayers);
+    if (mode === 'online' && roomId) {
+      setOnlineRoomId(roomId);
+      await setupOnlineGame(roomId, newLandscape);
+      
+      // We need to fetch the final landscape after setupOnlineGame has updated the DB
+      const { data: finalRoomData } = await supabase
+        .from('game_rooms')
+        .select('landscape')
+        .eq('id', roomId)
+        .single();
+      
+      if (finalRoomData?.landscape) {
+        const syncedLandscape = JSON.parse(finalRoomData.landscape);
+        setLandscape(syncedLandscape);
+        setPlayers(snapPlayersToTerrain(syncedLandscape, initialPlayers));
+      }
+    } else {
+      setLandscape(newLandscape);
+      setPlayers(snapPlayersToTerrain(newLandscape, initialPlayers));
+    }
+
     setCurrentPlayerIndex(0);
     setGameOver(false);
     setWinner(null);
@@ -256,16 +273,11 @@ function App() {
     setLaunchCommand(null);
     setIsInFlight(false);
     launchLock.current = false;
-
-    if (mode === 'online' && roomId) {
-      setOnlineRoomId(roomId);
-      setupOnlineGame(roomId, newLandscape);
-    }
   }, [setupOnlineGame, snapPlayersToTerrain]);
 
-  const handleSelectMode = useCallback((mode: GameMode, roomId?: string) => {
+  const handleSelectMode = useCallback(async (mode: GameMode, roomId?: string) => {
     if (onlineRoomId) leaveOnlineRoom(onlineRoomId);
-    initializeGame(mode, roomId);
+    await initializeGame(mode, roomId);
   }, [initializeGame, onlineRoomId, leaveOnlineRoom]);
 
   const isMyTurn = gameMode === 'online' ? currentPlayerIndex === myPlayerIndex : true;
@@ -276,11 +288,9 @@ function App() {
     const currentPlayer = players[currentPlayerIndex];
     if (!currentPlayer) return;
     
-    // Lock immediately to prevent double-firing
     launchLock.current = true;
     setIsInFlight(true);
 
-    // Determine wind for this specific shot
     const shotWind = Math.random() * 2 - 1;
     setWind(shotWind);
 
@@ -303,10 +313,10 @@ function App() {
 
   useEffect(() => {
     if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver && !isInFlight) {
-      const aiTimer = setTimeout(() => {
+      const aiTimer = setTimeout() => {
         const aiPlayer = players[1];
         const targetPlayer = players[0];
-        if (!aiPlayer || !targetPlayer) return;
+        if (!aiPlayer || !targetPlayer) { return; }
         handleLaunch(45 + (Math.random() * 20 - 10), (Math.abs(targetPlayer.x - aiPlayer.x) / 10) + (wind * 15) + 20);
       }, 1500);
       return () => clearTimeout(aiTimer);
@@ -321,7 +331,7 @@ function App() {
     <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans flex flex-col">
       {isPortrait && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
-          <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-4" />
+          <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-lazy-slow mb-4" />
           <h2 className="text-2xl font-bold">Landscape Mode Required</h2>
         </div>
       )}
@@ -329,13 +339,12 @@ function App() {
       <header className="shrink-0 z-20 p-3 flex items-center justify-between backdrop-blur-sm bg-white/5">
         <div className="flex items-center space-x-2">
           <Sparkles size={18} className="text-yellow-300" />
-          <h1 className="text-sm md:text-xl font-extrabold tracking-tight">Unicorns & Narwhals</h1>
         </div>
         {gameMode === 'online' && (
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1 bg-green-500/20 px-2 py-0.5 rounded-full border border-green-500/30 text-[10px] font-bold">
-              <ShieldCheck size={12} className="text-green-400" />
-              <span>P{myPlayerIndex !== null ? myPlayerIndex + 1 : '?'}</span>
+            <ShieldCheck size={12} className="text-green-400" />
+            <span>P{myPlayerIndex !== null ? myPlayerIndex + 1 : '?'}</span>
             </div>
           </div>
         )}
@@ -364,7 +373,7 @@ function App() {
               <User size={10} />
               <span>{currentPlayerData.name}'s Turn</span>
             </div>
-          </div>
+        </div>
         )}
 
         {!showSplash && !isOnlineLobby && currentPlayerData && (
@@ -393,7 +402,7 @@ function App() {
               <h2 className="text-xl font-bold mb-1">Waiting for Opponent...</h2>
               <p className="text-xs text-gray-300">Room: <span className="text-white font-mono font-bold">{onlineRoomId}</span></p>
             </div>
-          </div>
+            </div>
         )}
       </main>
     </div>
