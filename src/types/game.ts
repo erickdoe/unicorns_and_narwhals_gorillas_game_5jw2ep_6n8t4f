@@ -15,6 +15,7 @@ export interface Projectile {
   vy: number;
   color: string;
   ownerId: number;
+  shotId: number;
 }
 
 export interface GameState {

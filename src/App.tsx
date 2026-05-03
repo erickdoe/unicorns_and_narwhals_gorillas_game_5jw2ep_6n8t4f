@@ -61,6 +61,7 @@ function App() {
   const supabaseChannel = useRef<any>(null);
   const userIdRef = useRef(Math.random().toString(36).substring(7));
   const launchLock = useRef(false);
+  const processedShotId = useRef<number | null>(null);
 
   const snapPlayersToTerrain = useCallback((currentLandscape: number[], currentPlayers: Player[]) => {
     return currentPlayers.map(player => {
@@ -90,19 +91,14 @@ function App() {
     });
   }, [handleGameEnd]);
 
-  const handleProjectileLanded = useCallback(() => {
-    setTimeout(() => {
-      setIsInFlight(false);
-      if (gameMode !== 'online') {
-        setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
-      }
-    }, 150);
-  }, [players.length, gameMode]);
+  const handleProjectileLanded = useCallback(async (shotId: number) => {
+    // CRITICAL FIX: Prevent double-triggering turn changes for the same shot
+    if (processedShotId.current === shotId) return;
+    processedShotId.current = shotId;
 
-  const handleOnlineProjectileLanded = useCallback(async () => {
+    // Handle Online Turn Transition
     if (gameMode === 'online' && onlineRoomId && currentPlayerIndex === myPlayerIndex) {
       const nextIndex = (currentPlayerIndex + 1) % players.length;
-      
       try {
         await supabase
           .from('game_rooms')
@@ -112,11 +108,15 @@ function App() {
         console.error("Failed to update turn in DB:", error);
       }
     }
-    
-    if (gameMode !== 'online') {
-      handleProjectileLanded();
-    }
-  }, [gameMode, currentPlayerIndex, myPlayerIndex, players.length, handleProjectileLanded, onlineRoomId]);
+
+    // Handle Local Turn Transition and UI state
+    setTimeout(() => {
+      setIsInFlight(false);
+      if (gameMode !== 'online') {
+        setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
+      }
+    }, 150);
+  }, [gameMode, onlineRoomId, currentPlayerIndex, myPlayerIndex, players.length]);
 
   const handleOnlinePlayerHit = useCallback((playerId: number) => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {
@@ -252,6 +252,7 @@ function App() {
     setLaunchCommand(null);
     setIsInFlight(false);
     launchLock.current = false;
+    processedShotId.current = null;
   }, [setupOnlineGame, snapPlayersToTerrain]);
 
   const handleSelectMode = useCallback(async (mode: GameMode, roomId?: string) => {
@@ -332,7 +333,7 @@ function App() {
               landscape={landscape}
               launchCommand={launchCommand}
               onPlayerHit={gameMode === 'online' ? handleOnlinePlayerHit : handlePlayerHit}
-              onProjectileLanded={gameMode === 'online' ? handleOnlineProjectileLanded : handleProjectileLanded}
+              onProjectileLanded={handleProjectileLanded}
               onGameEnd={handleGameEnd}
               wind={wind}
             />
