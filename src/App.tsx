@@ -92,9 +92,16 @@ function App() {
   }, [handleGameEnd]);
 
   const handleProjectileLanded = useCallback(async (shotId: number) => {
-    // CRITICAL FIX: Prevent double-triggering turn changes for the same shot
+    // 1. Idempotency Guard: Never process the same shot twice
     if (processedShotId.current === shotId) return;
+    
+    // 2. State Guard: Only process landing if a shot was actually in flight
+    if (!isInFlight) return;
+
     processedShotId.current = shotId;
+    
+    // Mark as not in flight IMMEDIATELY to prevent any other triggers
+    setIsInFlight(false);
 
     // Handle Online Turn Transition
     if (gameMode === 'online' && onlineRoomId && currentPlayerIndex === myPlayerIndex) {
@@ -109,14 +116,13 @@ function App() {
       }
     }
 
-    // Handle Local Turn Transition and UI state
+    // Handle Local Turn Transition with a slight delay for visual polish
     setTimeout(() => {
-      setIsInFlight(false);
       if (gameMode !== 'online') {
         setCurrentPlayerIndex(prevIndex => (prevIndex + 1) % players.length);
       }
     }, 150);
-  }, [gameMode, onlineRoomId, currentPlayerIndex, myPlayerIndex, players.length]);
+  }, [gameMode, onlineRoomId, currentPlayerIndex, myPlayerIndex, players.length, isInFlight]);
 
   const handleOnlinePlayerHit = useCallback((playerId: number) => {
     if (gameMode === 'online' && supabaseChannel.current && currentPlayerIndex === myPlayerIndex) {

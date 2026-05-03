@@ -17,7 +17,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
   
-  // Use refs for callbacks to avoid stale closures in the animation loop
   const callbacksRef = useRef({
     onPlayerHit,
     onProjectileLanded,
@@ -111,18 +110,24 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameWidth, gameHeight, players,
       p.y += p.vy;
 
       const mapX = Math.floor(p.x);
+      
+      // 1. Terrain Collision
       if (mapX >= 0 && mapX < currentLandscape.length) {
         if (p.y > currentLandscape[mapX]) {
           projectiles.splice(i, 1);
           callbacksRef.current.onProjectileLanded(p.shotId);
           continue;
         }
-      } else if (p.x < 0 || p.x > canvas.width) {
+      } 
+      
+      // 2. Strict World Boundary Collision (Use gameWidth constant, not canvas.width)
+      if (p.x < 0 || p.x > gameWidth) {
         projectiles.splice(i, 1);
         callbacksRef.current.onProjectileLanded(p.shotId);
         continue;
       }
 
+      // 3. Player Collision
       let hit = false;
       for (const player of currentPlayers) {
         if (player.health <= 0) continue;
