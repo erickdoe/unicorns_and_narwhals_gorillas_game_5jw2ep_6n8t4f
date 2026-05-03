@@ -174,17 +174,13 @@ function App() {
     const existingLandscape = roomData?.landscape ? JSON.parse(roomData.landscape) : null;
     const initialTurn = roomData?.current_turn ?? 0;
 
-    if (existingLandscape) {
-      setLandscape(existingLandscape);
-      setPlayers(prev => snapPlayersToTerrain(existingLandscape, prev));
-    }
-    
-    setCurrentPlayerIndex(initialTurn);
+    // Use existing landscape if available, otherwise use the generated one
+    const finalLandscape = existingLandscape || currentLandscape;
 
     await supabase.from('game_rooms').upsert({ 
       id: roomId, 
       player_count: newCount,
-      landscape: currentCount === 0 ? JSON.stringify(currentLandscape) : roomData?.landscape,
+      landscape: JSON.stringify(finalLandscape),
       current_turn: initialTurn,
       status: newCount >= 2 ? 'playing' : 'waiting'
     });
@@ -233,38 +229,32 @@ function App() {
       .subscribe();
 
     supabaseChannel.current = channel;
-  }, [handlePlayerHit, snapPlayersToTerrain]);
+    
+    return { landscape: finalLandscape, turn: initialTurn };
+  }, [handlePlayerHit]);
 
   const initializeGame = useCallback(async (mode: GameMode, roomId?: string) => {
-    const newLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
+    const defaultLandscape = generateLandscape(GAME_WIDTH, GAME_HEIGHT);
     
     const initialPlayers: Player[] = [
       { id: 1, name: 'Doodoo head', color: '#9E7FFF', x: 80, y: 0, health: 100, isUnicorn: true },
       { id: 2, name: 'Blowfish', color: '#38bdf8', x: GAME_WIDTH - 160, y: 0, health: 100, isUnicorn: false },
     ];
 
+    let finalLandscape = defaultLandscape;
+    let finalTurn = 0;
+
     if (mode === 'online' && roomId) {
       setOnlineRoomId(roomId);
-      await setupOnlineGame(roomId, newLandscape);
-      
-      // We need to fetch the final landscape after setupOnlineGame has updated the DB
-      const { data: finalRoomData } = await supabase
-        .from('game_rooms')
-        .select('landscape')
-        .eq('id', roomId)
-        .single();
-      
-      if (finalRoomData?.landscape) {
-        const syncedLandscape = JSON.parse(finalRoomData.landscape);
-        setLandscape(syncedLandscape);
-        setPlayers(snapPlayersToTerrain(syncedLandscape, initialPlayers));
-      }
-    } else {
-      setLandscape(newLandscape);
-      setPlayers(snapPlayersToTerrain(newLandscape, initialPlayers));
+      const { landscape: syncedLandscape, turn: syncedTurn } = await setupOnlineGame(roomId, defaultLandscape);
+      finalLandscape = syncedLandscape;
+      finalTurn = syncedTurn;
     }
 
-    setCurrentPlayerIndex(0);
+    setLandscape(finalLandscape);
+    setPlayers(snapPlayersToTerrain(finalLandscape, initialPlayers));
+    setCurrentPlayerIndex(finalTurn);
+    
     setGameOver(false);
     setWinner(null);
     setShowSplash(false);
@@ -276,7 +266,7 @@ function App() {
   }, [setupOnlineGame, snapPlayersToTerrain]);
 
   const handleSelectMode = useCallback(async (mode: GameMode, roomId?: string) => {
-    if (onlineRoomId) leaveOnlineRoom(onlineRoomId);
+    if (onlineRoomId) await leaveOnlineRoom(onlineRoomId);
     await initializeGame(mode, roomId);
   }, [initializeGame, onlineRoomId, leaveOnlineRoom]);
 
@@ -313,7 +303,7 @@ function App() {
 
   useEffect(() => {
     if (gameMode === 'single' && currentPlayerIndex === 1 && !gameOver && !isInFlight) {
-      const aiTimer = setTimeout() => {
+      const aiTimer = setTimeout(() => {
         const aiPlayer = players[1];
         const targetPlayer = players[0];
         if (!aiPlayer || !targetPlayer) { return; }
@@ -331,7 +321,7 @@ function App() {
     <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans flex flex-col">
       {isPortrait && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
-          <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-lazy-slow mb-4" />
+          <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-4" />
           <h2 className="text-2xl font-bold">Landscape Mode Required</h2>
         </div>
       )}
