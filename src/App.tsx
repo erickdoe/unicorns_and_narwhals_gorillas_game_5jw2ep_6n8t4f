@@ -50,7 +50,7 @@ function App() {
   const [winner, setWinner] = useState<Player | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [gameMode, setGameMode] = useState<GameMode>(null);
-  const [launchCommand, setLaunchCommand] = useState<{angle: number, power: number, id: number, playerId: number} | null>(null);
+  const [launchCommand, setLaunchCommand] = useState<{angle: number, power: number, id: number, playerId: number, wind: number} | null>(null);
   const [wind, setWind] = useState(Math.random() * 2 - 1);
   const [isPortrait, setIsPortrait] = useState(false);
   
@@ -61,6 +61,7 @@ function App() {
   
   const supabaseChannel = useRef<any>(null);
   const userIdRef = useRef(Math.random().toString(36).substring(7));
+  const launchLock = useRef(false);
 
   useEffect(() => {
     const checkOrientation = () => {
@@ -109,15 +110,17 @@ function App() {
   }, [players.length, gameMode]);
 
   const handleOnlineProjectileLanded = useCallback(async () => {
-    // Only the active player can trigger the turn change in the database
     if (gameMode === 'online' && onlineRoomId && currentPlayerIndex === myPlayerIndex) {
       const nextIndex = (currentPlayerIndex + 1) % players.length;
       
-      // Update the database as the single source of truth for the turn
-      await supabase
-        .from('game_rooms')
-        .update({ current_turn: nextIndex })
-        .eq('id', onlineRoomId);
+      try {
+        await supabase
+          .from('game_rooms')
+          .update({ current_turn: nextIndex })
+          .eq('id', onlineRoomId);
+      } catch (error) {
+        console.error("Failed to update turn in DB:", error);
+      }
     }
     
     if (gameMode !== 'online') {
@@ -200,6 +203,8 @@ function App() {
         if (users.length >= 2) setOpponentJoined(true);
       })
       .on('broadcast', { event: 'launch' }, ({ payload }) => {
+        // Sync wind from the launcher to ensure identical trajectories
+        setWind(payload.wind);
         setLaunchCommand({ ...payload, id: Date.now() });
         setIsInFlight(true);
       })
@@ -212,7 +217,6 @@ function App() {
         }
       });
 
-    // Listen for database changes to the current_turn column for guaranteed sync
     supabase
       .channel('db-changes')
       .on('postgres_changes', { 
@@ -223,7 +227,8 @@ function App() {
       }, (payload) => {
         if (payload.new.current_turn !== undefined) {
           setCurrentPlayerIndex(payload.new.current_turn);
-          setIsInFlight(false); // Unlock when the turn officially changes in DB
+          setIsInFlight(false);
+          launchLock.current = false;
         }
       })
       .subscribe();
@@ -250,6 +255,7 @@ function App() {
     setWind(Math.random() * 2 - 1);
     setLaunchCommand(null);
     setIsInFlight(false);
+    launchLock.current = false;
 
     if (mode === 'online' && roomId) {
       setOnlineRoomId(roomId);
@@ -265,20 +271,32 @@ function App() {
   const isMyTurn = gameMode === 'online' ? currentPlayerIndex === myPlayerIndex : true;
 
   const handleLaunch = useCallback((angle: number, power: number) => {
-    if (isInFlight || (gameMode === 'online' && !isMyTurn)) return;
+    if (isInFlight || launchLock.current || (gameMode === 'online' && !isMyTurn)) return;
 
     const currentPlayer = players[currentPlayerIndex];
     if (!currentPlayer) return;
     
+    // Lock immediately to prevent double-firing
+    launchLock.current = true;
     setIsInFlight(true);
-    setLaunchCommand({ angle, power, id: Date.now(), playerId: currentPlayer.id });
-    setWind(Math.random() * 2 - 1);
+
+    // Determine wind for this specific shot
+    const shotWind = Math.random() * 2 - 1;
+    setWind(shotWind);
+
+    setLaunchCommand({ 
+      angle, 
+      power, 
+      id: Date.now(), 
+      playerId: currentPlayer.id,
+      wind: shotWind 
+    });
 
     if (gameMode === 'online' && supabaseChannel.current) {
       supabaseChannel.current.send({
         type: 'broadcast',
         event: 'launch',
-        payload: { angle, power, playerId: currentPlayer.id }
+        payload: { angle, power, playerId: currentPlayer.id, wind: shotWind }
       });
     }
   }, [players, currentPlayerIndex, gameMode, isInFlight, isMyTurn]);
@@ -308,7 +326,6 @@ function App() {
         </div>
       )}
 
-      {/* Header - Fixed Height */}
       <header className="shrink-0 z-20 p-3 flex items-center justify-between backdrop-blur-sm bg-white/5">
         <div className="flex items-center space-x-2">
           <Sparkles size={18} className="text-yellow-300" />
@@ -324,7 +341,6 @@ function App() {
         )}
       </header>
 
-      {/* Main Game Area - Flexible Height */}
       <main className="flex-1 relative flex flex-col min-h-0">
         <div className={`flex-1 relative flex items-center justify-center min-h-0 ${showSplash || isOnlineLobby ? 'invisible' : 'visible'}`}>
           {!showSplash && !isOnlineLobby && players.length > 0 && (
@@ -342,7 +358,6 @@ function App() {
           )}
         </div>
 
-        {/* Turn Indicator Overlay */}
         {!showSplash && !isOnlineLobby && currentPlayerData && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 pointer-events-none">
             <div className="flex items-center space-x-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold border border-white/20">
@@ -352,7 +367,6 @@ function App() {
           </div>
         )}
 
-        {/* Controls - Pinned to Bottom */}
         {!showSplash && !isOnlineLobby && currentPlayerData && (
           <div className="shrink-0">
             <GameControls
