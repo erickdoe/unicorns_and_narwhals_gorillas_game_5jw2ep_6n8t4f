@@ -3,7 +3,7 @@ import GameCanvas from './components/GameCanvas';
 import GameControls from './components/GameControls';
 import SplashMenu from './components/SplashMenu';
 import { Player } from './types/game';
-import { Sparkles, RotateCw, User, ShieldCheck } from 'lucide-react';
+import { Sparkles, User, ShieldCheck } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 const GAME_WIDTH = 1200;
@@ -52,7 +52,6 @@ function App() {
   const [gameMode, setGameMode] = useState<GameMode>(null);
   const [launchCommand, setLaunchCommand] = useState<{angle: number, power: number, id: number, playerId: number, wind: number} | null>(null);
   const [wind, setWind] = useState(Math.random() * 2 - 1);
-  const [isPortrait, setIsPortrait] = useState(false);
   
   const [myPlayerIndex, setMyPlayerIndex] = useState<number | null>(null);
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
@@ -62,15 +61,6 @@ function App() {
   const supabaseChannel = useRef<any>(null);
   const userIdRef = useRef(Math.random().toString(36).substring(7));
   const launchLock = useRef(false);
-
-  useEffect(() => {
-    const checkOrientation = () => {
-      setIsPortrait(window.innerHeight > window.innerWidth);
-    };
-    checkOrientation();
-    window.addEventListener('resize', checkOrientation);
-    return () => window.removeEventListener('resize', checkOrientation);
-  }, []);
 
   const snapPlayersToTerrain = useCallback((currentLandscape: number[], currentPlayers: Player[]) => {
     return currentPlayers.map(player => {
@@ -174,7 +164,6 @@ function App() {
     const existingLandscape = roomData?.landscape ? JSON.parse(roomData.landscape) : null;
     const initialTurn = roomData?.current_turn ?? 0;
 
-    // Use existing landscape if available, otherwise use the generated one
     const finalLandscape = existingLandscape || currentLandscape;
 
     await supabase.from('game_rooms').upsert({ 
@@ -319,13 +308,6 @@ function App() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-purple-800 to-pink-700 text-white font-sans flex flex-col">
-      {isPortrait && (
-        <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-6 text-center">
-          <RotateCw size={64} className="text-yellow-300 animate-spin-slow mb-4" />
-          <h2 className="text-2xl font-bold">Landscape Mode Required</h2>
-        </div>
-      )}
-
       <header className="shrink-0 z-20 p-3 flex items-center justify-between backdrop-blur-sm bg-white/5">
         <div className="flex items-center space-x-2">
           <Sparkles size={18} className="text-yellow-300" />
@@ -367,7 +349,7 @@ function App() {
         )}
 
         {!showSplash && !isOnlineLobby && currentPlayerData && (
-          <div className="shrink-0">
+          <div className="flex-1 md:flex-none">
             <GameControls
               key={currentPlayerIndex} 
               currentPlayer={currentPlayerData}

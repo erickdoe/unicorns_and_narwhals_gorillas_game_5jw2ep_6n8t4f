@@ -38,32 +38,32 @@ const GameControls: React.FC<GameControlsProps> = ({
   }
 
   return (
-    <div className={`w-full px-4 py-2 md:py-4 backdrop-blur-md bg-white/10 border-t border-white/20 transition-all duration-300 ${disabled ? 'opacity-70' : ''}`}>
+    <div className={`w-full px-4 py-4 md:py-2 backdrop-blur-md bg-white/10 border-t border-white/20 transition-all duration-300 flex flex-col justify-center ${disabled ? 'opacity-70' : ''}`}>
       {!gameOver && (
-        <div className="max-w-6xl mx-auto flex flex-col gap-2">
+        <div className="max-w-6xl mx-auto w-full flex flex-col gap-6 md:gap-2">
           {/* Top Row: Info & Wind */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-lg md:text-2xl">{playerEmoji}</span>
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl md:text-lg">{playerEmoji}</span>
               <div className="flex flex-col">
-                <span className="text-xs md:text-sm font-bold text-white truncate max-w-[100px]">
+                <span className="text-sm md:text-xs font-bold text-white truncate max-w-[120px]">
                   {currentPlayer.name}
                 </span>
                 {disabled && (
-                  <span className="text-[10px] text-yellow-300 font-medium animate-pulse">
+                  <span className="text-xs md:text-[10px] text-yellow-300 font-medium animate-pulse">
                     {disabledMessage}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <div className="text-[10px] md:text-xs font-bold bg-black/20 px-2 py-1 rounded uppercase tracking-wider">
+            <div className="flex items-center space-x-4">
+              <div className="text-xs md:text-[10px] font-bold bg-black/20 px-3 py-1 rounded uppercase tracking-wider">
                 Wind: {absWind} {windArrow}
               </div>
               <button
                 onClick={handleLaunch}
-                className="px-4 py-1.5 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs md:text-sm font-black rounded-full shadow-lg transform transition active:scale-95 disabled:opacity-50"
+                className="px-6 py-3 md:px-4 md:py-1.5 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm md:text-xs font-black rounded-full shadow-lg transform transition active:scale-95 disabled:opacity-50"
                 disabled={gameOver || disabled}
               >
                 LAUNCH
@@ -71,12 +71,12 @@ const GameControls: React.FC<GameControlsProps> = ({
             </div>
           </div>
 
-          {/* Bottom Row: Sliders (Side by Side on Mobile) */}
-          <div className="grid grid-cols-2 gap-4 md:gap-8">
-            <div className="flex flex-col space-y-1">
-              <div className="flex justify-between text-[10px] font-bold text-purple-200 uppercase">
+          {/* Bottom Row: Sliders */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-8">
+            <div className="flex flex-col space-y-3 md:space-y-1">
+              <div className="flex justify-between text-xs md:text-[10px] font-bold text-purple-200 uppercase">
                 <span>Angle</span>
-                <span>{angle}°</span>
+                <span className="text-lg md:text-xs">{angle}°</span>
               </div>
               <input
                 type="range"
@@ -85,13 +85,13 @@ const GameControls: React.FC<GameControlsProps> = ({
                 value={angle}
                 onChange={(e) => setAngle(Number(e.target.value))}
                 disabled={disabled}
-                className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-400"
+                className="w-full h-3 md:h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-400"
               />
             </div>
-            <div className="flex flex-col space-y-1">
-              <div className="flex justify-between text-[10px] font-bold text-blue-200 uppercase">
+            <div className="flex flex-col space-y-3 md:space-y-1">
+              <div className="flex justify-between text-xs md:text-[10px] font-bold text-blue-200 uppercase">
                 <span>Power</span>
-                <span>{power}%</span>
+                <span className="text-lg md:text-xs">{power}%</span>
               </div>
               <input
                 type="range"
@@ -100,7 +100,7 @@ const GameControls: React.FC<GameControlsProps> = ({
                 value={power}
                 onChange={(e) => setPower(Number(e.target.value))}
                 disabled={disabled}
-                className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-400"
+                className="w-full h-3 md:h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-400"
               />
             </div>
           </div>
